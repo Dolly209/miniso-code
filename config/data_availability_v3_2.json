@@ -1,0 +1,121 @@
+{
+  "spec_version": "3.2",
+  "source": "V3.2 requirements cross-checked against 数据字段说明.pdf",
+  "policy": "No unlisted substitute field may be selected automatically.",
+  "decisions": [
+    {
+      "concept": "source_record_available_time",
+      "status": "proxy",
+      "physical_field": "ds",
+      "reason": "Delivered domestic tables expose a daily partition date but no record-level publish timestamp; ROUND 2 therefore enforces day-level Point-in-Time visibility with ds and separately filters physical event time where present."
+    },
+    {
+      "concept": "planned_distribution_qty",
+      "status": "missing",
+      "physical_field": null,
+      "reason": "The delivered placement table is not a planned distribution process table."
+    },
+    {
+      "concept": "actual_distribution_qty",
+      "status": "missing",
+      "physical_field": null,
+      "reason": "No formal actual distribution quantity is delivered."
+    },
+    {
+      "concept": "planned_display_date",
+      "status": "missing",
+      "physical_field": null,
+      "reason": "No formal planned display date is delivered."
+    },
+    {
+      "concept": "actual_display_date",
+      "status": "missing",
+      "physical_field": null,
+      "reason": "No formal actual display date is delivered."
+    },
+    {
+      "concept": "shelf_position",
+      "status": "missing",
+      "physical_field": null,
+      "reason": "No shelf-position field is delivered."
+    },
+    {
+      "concept": "receipt_issue_transfer_transaction_flow",
+      "status": "disabled",
+      "physical_field": null,
+      "reason": "The inventory-center table is a reconciliation snapshot, not transaction flow."
+    },
+    {
+      "concept": "moq",
+      "status": "manual/config",
+      "physical_field": null,
+      "reason": "Domestic delivered tables do not provide a confirmed formal MOQ field."
+    },
+    {
+      "concept": "capacity_calendar",
+      "status": "manual/config",
+      "physical_field": null,
+      "reason": "Supplier history provides fulfillment proxies, not committed available capacity."
+    },
+    {
+      "concept": "lead_time_schedule",
+      "status": "manual/config",
+      "physical_field": null,
+      "reason": "Formal first-order/reorder lead-time schedules are not delivered."
+    },
+    {
+      "concept": "promotion_flag",
+      "status": "missing",
+      "physical_field": null,
+      "reason": "The delivered domestic sales table does not provide a formal promotion flag."
+    },
+    {
+      "concept": "placement_launch_window_definition",
+      "status": "manual/config",
+      "physical_field": null,
+      "reason": "The first-arrival field is delivered. A versioned 28-day initial launch window is configured and may be overridden after category-level Train calibration."
+    },
+    {
+      "concept": "placement_not_planned_store_label",
+      "status": "missing",
+      "physical_field": null,
+      "reason": "Absence of an arrival row cannot distinguish a store that was not planned from a missing source row. The default empirical model records this limitation and lowers evidence confidence; a planned-distribution snapshot can later override it."
+    },
+    {
+      "concept": "placement_v_min_g_inv_max_g_tau_tier",
+      "status": "manual/config",
+      "physical_field": null,
+      "reason": "V3.2 defines these as versioned/backtested operating thresholds. The PDF and delivered field dictionary do not provide their business values."
+    },
+    {
+      "concept": "category_fit_last_90d",
+      "status": "missing",
+      "physical_field": null,
+      "reason": "The current Round 4 pool restores selected cohort SKUs for their post-launch windows; it is not a complete store-by-category restored history for the 90 days before the decision cutoff. Missing CategoryFit is therefore renormalized rather than fabricated."
+    },
+    {
+      "concept": "store_execution_rate",
+      "status": "missing",
+      "physical_field": null,
+      "reason": "The fields exist, but a formal store execution rate needs a versioned representative SKU/time universe. The bounded Round 4 pool is not asserted to be complete."
+    },
+    {
+      "concept": "distribution_reachability_store_ban_category_qualification",
+      "status": "missing",
+      "physical_field": null,
+      "reason": "Only open/closed store eligibility can currently be enforced. V3.2 hard constraints for reachability, bans and theme/category qualification require additional business inputs."
+    },
+    {
+      "concept": "lifecycle_random_effect_model",
+      "status": "manual/config",
+      "physical_field": null,
+      "reason": "Observed comparable curves and category lifecycle priors can be calculated, but the V3.2 insufficient-sample random-effects model must be fitted and validated on the full Train cohort."
+    },
+    {
+      "concept": "business_event_calendar",
+      "status": "neutral",
+      "physical_field": null,
+      "reason": "No confirmed future event calendar is delivered. V3.2 permits H=1 when no confirmed schedule applies; output records this status explicitly."
+    }
+  ]
+}

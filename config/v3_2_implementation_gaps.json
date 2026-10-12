@@ -1,0 +1,149 @@
+{
+  "spec_version": "3.2",
+  "policy": "The full pipeline remains runnable. Missing calibrated inputs use centralized versioned defaults or V3.2 missing-value renormalization, and every substitution is labeled in stage compliance artifacts.",
+  "m1_comparable": [
+    {
+      "concept": "48d_emotion_vector_and_path2",
+      "current_blocker": "No 48-dimensional emotion vector or approved emotion-tag model is delivered.",
+      "current_treatment": "The component remains missing and its weight is renormalized; Path2 cannot be formally activated."
+    },
+    {
+      "concept": "external_social_direction",
+      "current_blocker": "No point-in-time external IP/platform snapshot is delivered.",
+      "current_treatment": "Cext=1, which is the V3.2 neutral missing-input treatment."
+    },
+    {
+      "concept": "similarity_weights_temperature_and_K",
+      "current_blocker": "Full Train leave-one-SKU-out tuning has not been implemented or run.",
+      "current_treatment": "Reference config values support smoke tests; stage report is partial_v3_2_output."
+    }
+  ],
+  "m2_restore": [
+    {
+      "concept": "planned_vs_actual_distribution_and_display_delay",
+      "current_blocker": "Planned distribution quantity/date and planned/actual display dates are absent.",
+      "current_treatment": "first_store_arrival_time and first in-stock/display evidence are used only as labeled proxies; fulfillment/delay metrics are not fabricated."
+    },
+    {
+      "concept": "complete_operating_calendar",
+      "current_blocker": "No daily valid-business/closure calendar is delivered.",
+      "current_treatment": "Store status/open-close dates plus operational rows form a nullable Eopen proxy; unknown remains null."
+    },
+    {
+      "concept": "full_vmodel_covariates",
+      "current_blocker": "The current restoration model does not yet include all V3.2 tier/city/mall/area covariates and requires full Train validation.",
+      "current_treatment": "Huber item/store/category-or-global effects and price term are used and reported as a partial model, not a final trained model."
+    },
+    {
+      "concept": "business_event_calendar",
+      "current_blocker": "No confirmed event calendar is supplied.",
+      "current_treatment": "H=1 with neutral_no_event status, explicitly permitted by V3.2 when no schedule applies."
+    }
+  ],
+  "round6": [
+    {
+      "concept": "v_min_g_inv_max_g_tau_tier",
+      "formal_implementation": "Optional overrides are accepted through --placement-policy-file and validated per store_tier.",
+      "current_blocker": "The PDF specifies the role of these parameters but not their business-calibrated values.",
+      "current_treatment": "v_min,g uses the historical store-tier median; inv_max=0.40 and tau_tier=0.50 are centralized versioned initial values pending Train calibration."
+    },
+    {
+      "concept": "p_prior_and_p_perf",
+      "formal_implementation": "The adapter builds launch-window arrival evidence from first_store_arrival_time; a trained probability snapshot may override it through --placement-evidence-file.",
+      "current_blocker": "The current M2 artifact contains observed restore rows, not a definitive planned/not-planned store universe.",
+      "current_treatment": "Use the versioned 28-day window and current eligible-store universe, compute group empirical p_prior/p_perf and V3.2 shrinkage, and label the planned-vs-missing ambiguity. If raw launch evidence cannot be read, use the labeled M2 exposure proxy."
+    },
+    {
+      "concept": "CategoryFit",
+      "formal_implementation": "Read a standardized target-store feature snapshot; missing values follow V3.2 weight renormalization.",
+      "current_blocker": "Round 4 was limited to selected SKU post-launch windows and cannot prove complete last-90-day same-category coverage.",
+      "current_treatment": "Missing remains null and score weights are renormalized; no fabricated 0.5 value."
+    },
+    {
+      "concept": "Execution",
+      "formal_implementation": "Read the in-stock-day ratio with in_stock_not_displayed_flag=0 from a standardized feature snapshot.",
+      "current_blocker": "A versioned representative SKU/time universe has not been supplied.",
+      "current_treatment": "Missing remains null and score weights are renormalized; operate_size is never used as a proxy."
+    },
+    {
+      "concept": "hard_store_eligibility",
+      "formal_implementation": "Open/closed status is enforced from the store snapshot.",
+      "current_blocker": "Distribution reachability, store bans and category/theme qualification are not present in delivered fields.",
+      "current_treatment": "Unavailable constraints do not block the runnable pipeline, but are reported as unchecked and never presented as verified."
+    },
+    {
+      "concept": "complete_lifecycle_curve",
+      "formal_implementation": "Emits every week 1..Wlife from one validated week-1-normalized profile: selected comparables first, then L4/L3/L2/L1/global lifecycle priors.",
+      "current_blocker": "A trained product-random/store-tier-fixed-effects model is not yet available for residual gaps.",
+      "current_treatment": "A profile must have a positive non-negligible week-1 anchor, enough observed weeks/samples, finite non-negative factors and no factor above the versioned guardrail. Missing weeks are interpolated or edge-carried only within that one source; sources are never spliced week by week. If every historical profile is invalid, the full tier curve uses the labeled versioned flat default."
+    }
+  ],
+  "m5_factors": [
+    {
+      "concept": "formal_small_factor_universe",
+      "current_blocker": "Several V3.2 social, IP, product, operation and competition raw fields are not delivered.",
+      "current_treatment": "Missing groups are neutralized; available member/supplier fields are exploratory standardized features and are not claimed as final V3.2 factors."
+    },
+    {
+      "concept": "factor_weights_betas_price_elasticity_and_bounds",
+      "current_blocker": "V3.2 requires Train-only constrained OOF fitting; that joint training block is not implemented.",
+      "current_treatment": "Reference config parameters are smoke-only and run_factors reports requires_real_training."
+    },
+    {
+      "concept": "competition_rules",
+      "current_blocker": "No versioned competition input is supplied.",
+      "current_treatment": "Ccompetition=1 unless an explicit rule snapshot is passed."
+    }
+  ],
+  "m6_m7_first_order": [
+    {
+      "concept": "Wdecision_Wbuffer_Wlead_Whard",
+      "current_blocker": "Formal planning cadence, lead schedule, sell-end and license-end inputs are not delivered.",
+      "current_treatment": "Reference horizons support smoke tests and are labeled requires confirmation; a formal run must provide constraints."
+    },
+    {
+      "concept": "phased_arrival_curve",
+      "current_blocker": "No confirmed phased-arrival curve is supplied.",
+      "current_treatment": "All selected stores are treated as normal launch coverage; this is not a substitute for a confirmed phased rollout."
+    },
+    {
+      "concept": "minimum_store_and_display_units",
+      "current_blocker": "Confirmed m_s and d_s are not delivered.",
+      "current_treatment": "Both default to zero with missing_set_zero_per_v3_2 status; no unit is fabricated."
+    },
+    {
+      "concept": "MOQ_capacity_lead_and_case_pack",
+      "current_blocker": "Formal supply constraint snapshots are absent.",
+      "current_treatment": "Document reference MOQ/mold values are smoke-only; output explicitly requires business confirmation."
+    },
+    {
+      "concept": "reliability_score",
+      "current_blocker": "Qsample, Qstability and Qbacktest require trained OOF evidence.",
+      "current_treatment": "Current reliability is uncalibrated and must not be interpreted as the formal V3.2 probability."
+    }
+  ],
+  "training": [
+    {
+      "concept": "full_v3_2_joint_training",
+      "current_blocker": "Current rolling OOF code fits a generic regularized model but does not jointly train all V3.2 similarity, factor, lifecycle, reorder residual and reliability blocks.",
+      "current_treatment": "train.py is labeled partial_training_scaffold_not_full_v3_2."
+    }
+  ],
+  "n1_n6_reorder": [
+    {
+      "concept": "residual_feature_model_Mres",
+      "current_blocker": "No trained horizon/category residual model is available.",
+      "current_treatment": "Only the Actual/Plan main-path Mdev is active; no residual uplift is fabricated."
+    },
+    {
+      "concept": "future_inventory_and_supply_window",
+      "current_blocker": "Warehouse inventory, inbound ETA, waiting demand, protected inventory, lead schedule, MOQ and capacity need a decision-time snapshot.",
+      "current_treatment": "Constraints may be supplied for smoke; absent formal inputs are listed in the report and no production-ready claim is made."
+    },
+    {
+      "concept": "quality_and_reliability",
+      "current_blocker": "Refund semantics are unverified and future-window calibration labels are not mature.",
+      "current_treatment": "CR_quality=1 and CR_reliability remains uncalibrated."
+    }
+  ]
+}

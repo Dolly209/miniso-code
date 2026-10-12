@@ -1,0 +1,203 @@
+-- MINISO algorithm scheme V3.2, chapter 9.
+-- All business records are append-only. Late data creates a new run_id and records
+-- the superseded run instead of overwriting the original result.
+
+CREATE TABLE IF NOT EXISTS algo_decision_run (
+    record_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    run_id VARCHAR(64) NOT NULL,
+    run_state_seq INT UNSIGNED NOT NULL DEFAULT 1,
+    sku_code VARCHAR(128) NOT NULL,
+    decision_type VARCHAR(32) NOT NULL,
+    decision_cutoff_time DATETIME(6) NOT NULL,
+    trigger_source VARCHAR(128) NOT NULL,
+    run_started_at DATETIME(6) NOT NULL,
+    run_finished_at DATETIME(6) NULL,
+    run_status VARCHAR(32) NOT NULL,
+    model_version VARCHAR(128) NULL,
+    parameter_version VARCHAR(128) NULL,
+    rule_version VARCHAR(128) NULL,
+    dataset_version VARCHAR(128) NULL,
+    input_hash CHAR(64) NULL,
+    output_hash CHAR(64) NULL,
+    superseded_run_id VARCHAR(64) NULL,
+    status_message TEXT NULL,
+    created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    PRIMARY KEY (record_id),
+    UNIQUE KEY uq_algo_decision_run_state (run_id, run_state_seq),
+    KEY idx_algo_decision_run_sku_cutoff (sku_code, decision_cutoff_time),
+    KEY idx_algo_decision_run_superseded (superseded_run_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS algo_feature_snapshot (
+    snapshot_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    run_id VARCHAR(64) NOT NULL,
+    feature_code VARCHAR(192) NOT NULL,
+    feature_value_json LONGTEXT NULL,
+    entity_grain VARCHAR(128) NOT NULL,
+    entity_key VARCHAR(512) NOT NULL,
+    event_time DATETIME(6) NULL,
+    available_time DATETIME(6) NOT NULL,
+    source_version VARCHAR(128) NULL,
+    missing_flag TINYINT(1) NOT NULL DEFAULT 0,
+    proxy_flag TINYINT(1) NOT NULL DEFAULT 0,
+    fallback_flag TINYINT(1) NOT NULL DEFAULT 0,
+    quality_flag VARCHAR(64) NULL,
+    recorded_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    PRIMARY KEY (snapshot_id),
+    KEY idx_feature_snapshot_run_feature (run_id, feature_code),
+    KEY idx_feature_snapshot_entity (entity_grain, entity_key(191)),
+    KEY idx_feature_snapshot_available (available_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS algo_candidate_detail (
+    candidate_detail_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    run_id VARCHAR(64) NOT NULL,
+    candidate_sku_code VARCHAR(128) NOT NULL,
+    path_code VARCHAR(32) NOT NULL,
+    hard_filter_pass TINYINT(1) NOT NULL,
+    similarity_scores_json LONGTEXT NULL,
+    quality_score DECIMAL(20,10) NULL,
+    alpha_weight DECIMAL(20,10) NULL,
+    history_restore_metrics_json LONGTEXT NULL,
+    exclusion_reason VARCHAR(512) NULL,
+    recorded_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    PRIMARY KEY (candidate_detail_id),
+    UNIQUE KEY uq_candidate_run_sku (run_id, candidate_sku_code),
+    KEY idx_candidate_run_path (run_id, path_code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS algo_calc_detail (
+    calc_detail_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    run_id VARCHAR(64) NOT NULL,
+    calc_item_code VARCHAR(192) NOT NULL,
+    calc_sequence INT UNSIGNED NOT NULL DEFAULT 1,
+    raw_value_json LONGTEXT NULL,
+    percentile_score DECIMAL(20,10) NULL,
+    c_value DECIMAL(20,10) NULL,
+    protected_band_json LONGTEXT NULL,
+    r_lambda_m_json LONGTEXT NULL,
+    window_json LONGTEXT NULL,
+    inventory_deduction_json LONGTEXT NULL,
+    pre_clip_value DECIMAL(24,8) NULL,
+    post_clip_value DECIMAL(24,8) NULL,
+    detail_json LONGTEXT NULL,
+    recorded_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    PRIMARY KEY (calc_detail_id),
+    UNIQUE KEY uq_calc_run_item_seq (run_id, calc_item_code, calc_sequence),
+    KEY idx_calc_run (run_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS algo_prediction (
+    prediction_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    run_id VARCHAR(64) NOT NULL,
+    prediction_horizon VARCHAR(64) NOT NULL,
+    demand_prediction DECIMAL(24,8) NULL,
+    q_nat DECIMAL(24,8) NULL,
+    q_plan DECIMAL(24,8) NULL,
+    q_feas DECIMAL(24,8) NULL,
+    q_opp DECIMAL(24,8) NULL,
+    sabc_grade CHAR(1) NULL,
+    reorder_action VARCHAR(64) NULL,
+    confidence_score DECIMAL(9,6) NULL,
+    error_interval_lower DECIMAL(24,8) NULL,
+    error_interval_upper DECIMAL(24,8) NULL,
+    downgrade_reason VARCHAR(512) NULL,
+    recorded_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    PRIMARY KEY (prediction_id),
+    UNIQUE KEY uq_prediction_run_horizon (run_id, prediction_horizon),
+    KEY idx_prediction_run (run_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS human_decision (
+    human_decision_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    sku_code VARCHAR(128) NOT NULL,
+    decision_time DATETIME(6) NOT NULL,
+    decision_version INT UNSIGNED NOT NULL,
+    source_run_id VARCHAR(64) NOT NULL,
+    viewed_system_quantity DECIMAL(24,8) NULL,
+    viewed_system_grade CHAR(1) NULL,
+    viewed_store_allocation_json LONGTEXT NULL,
+    viewed_at DATETIME(6) NULL,
+    final_quantity DECIMAL(24,8) NULL,
+    adjustment_reason_code VARCHAR(128) NULL,
+    remark TEXT NULL,
+    approver VARCHAR(128) NULL,
+    approved_at DATETIME(6) NULL,
+    submitted_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    PRIMARY KEY (human_decision_id),
+    UNIQUE KEY uq_human_sku_time_version (sku_code, decision_time, decision_version),
+    KEY idx_human_source_run (source_run_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS supply_execution (
+    supply_execution_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    execution_event_id VARCHAR(128) NOT NULL,
+    source_run_id VARCHAR(64) NULL,
+    sku_code VARCHAR(128) NOT NULL,
+    order_no VARCHAR(128) NULL,
+    batch_no VARCHAR(128) NULL,
+    event_type VARCHAR(64) NOT NULL,
+    event_time DATETIME(6) NOT NULL,
+    actual_order_quantity DECIMAL(24,8) NULL,
+    cancelled_quantity DECIMAL(24,8) NULL,
+    changed_quantity DECIMAL(24,8) NULL,
+    moq_deduction_quantity DECIMAL(24,8) NULL,
+    case_pack_deduction_quantity DECIMAL(24,8) NULL,
+    capacity_deduction_quantity DECIMAL(24,8) NULL,
+    promised_arrival_time DATETIME(6) NULL,
+    actual_arrival_time DATETIME(6) NULL,
+    executed_quantity DECIMAL(24,8) NULL,
+    non_execution_reason VARCHAR(512) NULL,
+    recorded_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    PRIMARY KEY (supply_execution_id),
+    UNIQUE KEY uq_supply_execution_event (execution_event_id),
+    KEY idx_supply_order_batch (order_no, batch_no),
+    KEY idx_supply_sku_event_time (sku_code, event_time),
+    KEY idx_supply_source_run (source_run_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS sku_store_daily (
+    sku_store_daily_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    sku_code VARCHAR(128) NOT NULL,
+    store_code VARCHAR(128) NOT NULL,
+    business_date DATE NOT NULL,
+    data_version VARCHAR(128) NOT NULL,
+    sales_quantity DECIMAL(24,8) NULL,
+    inventory_quantity DECIMAL(24,8) NULL,
+    in_transit_quantity DECIMAL(24,8) NULL,
+    receipt_quantity DECIMAL(24,8) NULL,
+    out_of_stock_flag TINYINT(1) NULL,
+    not_displayed_flag TINYINT(1) NULL,
+    promotion_flag TINYINT(1) NULL,
+    return_quantity DECIMAL(24,8) NULL,
+    transfer_quantity DECIMAL(24,8) NULL,
+    association_status VARCHAR(64) NULL,
+    source_version VARCHAR(128) NULL,
+    warehouse_arrived_at DATETIME(6) NOT NULL,
+    recorded_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    PRIMARY KEY (sku_store_daily_id),
+    UNIQUE KEY uq_sku_store_day_version (sku_code, store_code, business_date, data_version),
+    KEY idx_sku_store_daily_day (business_date),
+    KEY idx_sku_store_daily_sku_day (sku_code, business_date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS evaluation_label (
+    evaluation_label_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    run_id VARCHAR(64) NOT NULL,
+    label_window VARCHAR(64) NOT NULL,
+    label_version VARCHAR(128) NOT NULL,
+    reference_demand DECIMAL(24,8) NULL,
+    maturity_date DATE NOT NULL,
+    demand_error DECIMAL(24,8) NULL,
+    out_of_stock_truth TINYINT(1) NULL,
+    backlog_truth TINYINT(1) NULL,
+    state_truth VARCHAR(64) NULL,
+    interval_hit_flag TINYINT(1) NULL,
+    label_quality VARCHAR(64) NOT NULL,
+    quality_detail_json LONGTEXT NULL,
+    linked_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    PRIMARY KEY (evaluation_label_id),
+    UNIQUE KEY uq_evaluation_run_window_version (run_id, label_window, label_version),
+    KEY idx_evaluation_maturity (maturity_date),
+    KEY idx_evaluation_run (run_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

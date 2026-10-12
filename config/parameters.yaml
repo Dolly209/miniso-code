@@ -1,0 +1,74 @@
+{
+  "spec_version": "3.2",
+  "server": {
+    "project_root": "/tmp/code/xujing",
+    "data_root": "/data01/yeyingshi/data"
+  },
+  "project": {
+    "timezone": "Asia/Shanghai",
+    "log_dir": "logs"
+  },
+  "probe": {
+    "table_specs_path": "config/source_tables.json",
+    "sample_files_per_table": 3,
+    "max_sample_files_to_attempt": 50,
+    "sample_rows_per_file": 2000,
+    "max_sample_rows_per_table": 5000,
+    "recent_partition_limit": 10,
+    "sample_file_limit": 10
+  },
+  "data_reader": {
+    "max_rows_per_read": 1000000,
+    "confirmed_physical_format": "parquet",
+    "partition_availability_granularity": "day"
+  },
+  "training": {
+    "train_ratio": 0.8,
+    "reference_example": {
+      "cohort_size": 1178,
+      "train_size": 955,
+      "test_size": 223,
+      "train_test_cutoff": "2025-11-01"
+    },
+    "n_time_blocks": 5,
+    "label_distribution_window_weeks": 26,
+    "cohort_scan_batch_size": 50000,
+    "time_half_life_candidates_weeks": [26, 52, 78, "infinity"],
+    "long_tail_sku_equal_weight": 0.5,
+    "long_tail_sales_band_equal_weight": 0.5,
+    "same_first_sale_day_must_stay_together": true
+  },
+  "restoration": {
+    "abnormal_order_quantile": 0.995,
+    "stockout_min_days_per_week": 3,
+    "stockout_flag_share_threshold": 0.4,
+    "shrinkage_k_exposure_days": 7.0,
+    "huber_delta": 1.345,
+    "huber_max_iter": 30,
+    "item_effect_ridge": 10.0,
+    "store_effect_ridge": 20.0,
+    "minimum_price_observations": 30,
+    "promotion_price_ratio_threshold": 0.98
+  },
+  "data_contracts": {
+    "availability_registry_path": "config/data_availability_v3_2.json",
+    "allowed_unavailable_field_statuses": [
+      "missing",
+      "proxy",
+      "manual/config",
+      "neutral",
+      "disabled"
+    ],
+    "sales_delivery_contains_normal_rows_only": true,
+    "sales_business_date": "DATE(order_time)",
+    "sales_order_line_key": ["order_id", "order_detail_id"],
+    "actual_first_sale_date": "MIN(DATE(order_time)) WHERE sale_qty > 0",
+    "product_first_sale_date_usage": "reference/audit",
+    "forbid_refund_double_subtraction": true,
+    "aggregate_sales_inventory_before_ip_join_grain": ["sku_code", "store_code", "day"],
+    "one_comparable_weight_per_historical_sku": true,
+    "forbid_total_stock_plus_transit_stock": true,
+    "inventory_center_is_transaction_flow": false,
+    "placement_table_is_planned_distribution_process": false
+  }
+}

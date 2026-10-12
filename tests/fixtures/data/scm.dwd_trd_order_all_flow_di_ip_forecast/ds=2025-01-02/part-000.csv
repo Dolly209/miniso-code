@@ -1,0 +1,3 @@
+ds,order_id,order_detail_id,order_time,stat_date,sku_code,store_code,sale_qty,is_return
+2025-01-02,ORDER02,LINE01,2025-01-02 10:00:00,2025-01-02,SKU003,STORE01,1,0
+

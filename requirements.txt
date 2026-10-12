@@ -1,0 +1,13 @@
+# Runtime dependencies for the Ubuntu / Python 3.10 server environment.
+# The project never installs these automatically; server_probe.py only reports versions.
+numpy>=1.24
+pandas>=2.0
+pyarrow>=14
+scikit-learn>=1.3
+scipy>=1.10
+SQLAlchemy>=2.0
+PyMySQL>=1.1
+statsmodels>=0.14
+
+# Local/synthetic tests only.
+pytest>=7.4

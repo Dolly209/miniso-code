@@ -1,0 +1,3 @@
+ds,purchase_order_no,purchase_order_line_no,sku_code,target_qty,received_qty,arrival_date
+2025-01-01,PO01,10,SKU001,100,80,2025-01-01
+

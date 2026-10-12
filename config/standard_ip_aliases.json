@@ -1,0 +1,66 @@
+{
+  "version": "statistics-sheet-v1",
+  "source_sheet": "统计",
+  "minimum_numeric_spu_length": 8,
+  "blocked_text_codes": [
+    "工作室艺术家",
+    "全明星",
+    "悠悠",
+    "旺旺"
+  ],
+  "redirects": {
+    "TOM and JERRY": "猫和老鼠",
+    "哇库库": "WAKUKU",
+    "气宝": "AngryAimee",
+    "TSUM TSUM": "迪士尼::迪士尼松松",
+    "冰雪奇缘": "迪士尼::冰雪奇缘",
+    "青春变形记": "皮克斯::青春变形记",
+    "机动战士高达": "高达"
+  },
+  "parent_defaults": {
+    "迪士尼": "迪士尼::迪士尼综合",
+    "皮克斯": "皮克斯::皮克斯综合",
+    "三丽鸥": "三丽鸥::三丽鸥家族"
+  },
+  "parent_aliases": {
+    "迪士尼": ["Disney"],
+    "皮克斯": ["Pixar"],
+    "三丽鸥": ["Sanrio", "Sanrio characters"]
+  },
+  "duplicate_child_parent_precedence": [
+    "皮克斯",
+    "迪士尼"
+  ],
+  "canonical_aliases": {
+    "迪士尼::爱丽丝梦游仙境": ["爱丽丝", "Alice in Wonderland"],
+    "迪士尼::冰雪奇缘": ["Frozen"],
+    "迪士尼::迪士尼Ufufy": ["Ufufy"],
+    "迪士尼::迪士尼反派": ["Disney Villains"],
+    "迪士尼::迪士尼公主": ["Disney Princess", "白雪公主", "灰姑娘", "长发公主", "贝儿公主", "茉莉公主"],
+    "迪士尼::迪士尼松松": ["松松", "Tsum Tsum"],
+    "迪士尼::疯狂动物城": ["Zootopia"],
+    "迪士尼::米奇和朋友们": ["米奇", "米妮", "Mickey", "Mickey Mouse", "Minnie", "Minnie Mouse"],
+    "迪士尼::唐老鸭和黛西": ["唐老鸭", "黛西", "Donald Duck", "Daisy Duck"],
+    "迪士尼::玩具总动员": ["Toy Story", "胡迪", "巴斯光年"],
+    "迪士尼::小飞侠": ["Peter Pan"],
+    "迪士尼::小熊维尼": ["维尼", "Winnie the Pooh", "Pooh", "跳跳虎"],
+    "迪士尼::星际宝贝": ["史迪奇", "Stitch", "Lilo and Stitch", "莉萝和史迪奇"],
+    "漫威::钢铁侠": ["Iron Man"],
+    "漫威::美国队长": ["Captain America"],
+    "漫威::蜘蛛侠": ["Spider-Man", "Spider Man"],
+    "皮克斯::青春变形记": ["Turning Red"],
+    "皮克斯::玩具总动员": ["Toy Story", "胡迪", "巴斯光年"],
+    "三丽鸥::Hello Kitty": ["凯蒂猫", "Kitty"],
+    "三丽鸥::布丁狗": ["Pompompurin"],
+    "三丽鸥::大耳狗": ["玉桂狗", "喜拿", "Cinnamoroll"],
+    "三丽鸥::大眼蛙": ["Keroppi"],
+    "三丽鸥::酷洛米": ["Kuromi"],
+    "三丽鸥::酷企鹅": ["Bad Badtz-Maru", "Badtz-Maru"],
+    "三丽鸥::美乐蒂": ["My Melody"],
+    "三丽鸥::帕恰狗": ["Pochacco"],
+    "三丽鸥::人鱼汉顿": ["Hangyodon"],
+    "猫和老鼠": ["Tom and Jerry"],
+    "WAKUKU": ["哇库库"],
+    "AngryAimee": ["气宝"]
+  }
+}

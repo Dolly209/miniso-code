@@ -1,0 +1,3 @@
+ds,supplier_code,sku_code,target_qty,received_qty,receipt_fulfillment_rate
+2025-01-01,SUP01,SKU001,100,80,0.8
+

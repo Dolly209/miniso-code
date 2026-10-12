@@ -1,0 +1,18 @@
+.env
+.DS_Store
+.pytest_cache/
+__pycache__/
+*.py[cod]
+artifacts/
+logs/
+
+# Local customer/reference data. Keep the code and templates in Git,
+# but regenerate or supply these files through an approved data channel.
+reference/*.csv
+
+# Local build and test output
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/

@@ -1,0 +1,172 @@
+{
+  "document_source": "数据字段说明.pdf（国内数据部分）",
+  "notes": "字段名来自字段说明文档；探测器只核对真实 schema，不创建替代字段。",
+  "tables": [
+    {
+      "table_name": "scm.dim_goods_info_ip_forecast",
+      "partition_column": "ds",
+      "read_mode": "latest_snapshot",
+      "business_date_column": "ds",
+      "grain_columns": ["ds", "sku_code", "ip_code"],
+      "required_fields": [
+        "ds", "sku_code", "sku_name", "spu_code", "spu_name", "ip_code", "ip_name",
+        "copyright_code", "copyright_name", "copyright_category", "copyright_exp_date",
+        "cate_level1_code", "cate_level1_name", "cate_level2_code", "cate_level2_name",
+        "cate_level3_code", "cate_level3_name", "cate_level4_code", "cate_level4_name",
+        "manage_cate_name", "release_dt", "first_sale_date", "lifecycle", "retail_price",
+        "comb_price", "box_unit", "goods_unit", "pkg_unit"
+      ],
+      "key_columns": ["ds", "sku_code", "ip_code"],
+      "sku_column": "sku_code",
+      "date_columns": ["ds", "release_dt", "first_sale_date"],
+      "ip_column": "ip_code"
+    },
+    {
+      "table_name": "scm.dim_store_info_ip_forecast",
+      "partition_column": "ds",
+      "read_mode": "latest_snapshot",
+      "business_date_column": "ds",
+      "grain_columns": ["ds", "store_code"],
+      "required_fields": [
+        "ds", "store_code", "store_name", "store_business_state", "store_business_state_name",
+        "store_level", "area_class1_id", "area_class1_name", "area_class2_id", "area_class2_name",
+        "area_class3_id", "area_class3_name", "province_name", "city_name", "district_name",
+        "city_level", "secbiz_area_name", "operate_size", "meter_sum", "open_date", "close_date",
+        "sts_state", "mainwarehouse", "mainwarehouse_name"
+      ],
+      "key_columns": ["ds", "store_code"],
+      "store_column": "store_code",
+      "date_columns": ["ds", "open_date", "close_date"]
+    },
+    {
+      "table_name": "scm.dwd_trd_order_all_flow_di_ip_forecast",
+      "partition_column": "ds",
+      "read_mode": "partition_range",
+      "business_date_column": "order_time",
+      "grain_columns": ["order_id", "order_detail_id"],
+      "required_fields": [
+        "ds", "order_id", "order_detail_id", "order_time", "pay_time", "stat_date", "sku_code",
+        "spu_id", "sku_name", "store_code", "store_name", "channel_id", "channel_type", "sale_qty",
+        "order_amt", "paid_amt", "achievement_amt", "unit_paid_price", "is_pay", "is_return",
+        "refund_qty", "refund_amt", "gift_flag"
+      ],
+      "key_columns": ["ds", "order_id", "order_detail_id"],
+      "sku_column": "sku_code",
+      "store_column": "store_code",
+      "date_columns": ["ds", "stat_date", "order_time", "pay_time"]
+    },
+    {
+      "table_name": "scm.dwd_zhgyl_store_sale_inv_ip_forecast",
+      "partition_column": "ds",
+      "read_mode": "partition_range",
+      "business_date_column": "stock_date",
+      "grain_columns": ["ds", "store_code", "sku_code"],
+      "required_fields": [
+        "ds", "stock_date", "store_code", "store_name", "warehouse_code", "sku_code", "spu_id",
+        "sku_name", "mainwarehouse", "delivery_wrh_name", "cate_level1_code", "cate_level1_name",
+        "cate_level4_code", "cate_level4_name", "qty", "realamt", "mo", "qty_offline", "qty_group",
+        "qty_020", "qty_location", "realamt_offline", "realamt_group", "realamt_020",
+        "realamt_location", "qty_location_store", "qty_location_wrh", "realamt_location_store",
+        "realamt_location_wrh", "gift_qty", "gift_amt", "stock_available_itm_cnt", "stock_itm_cnt",
+        "stock_all_itm_cnt", "is_js", "available_stock_qty", "available_and_direct_transit_qty",
+        "total_stock_qty", "transit_stock_qty", "out_of_stock_flag", "simple_coverage_days"
+      ],
+      "key_columns": ["ds", "store_code", "sku_code"],
+      "sku_column": "sku_code",
+      "store_column": "store_code",
+      "date_columns": ["ds", "stock_date"]
+    },
+    {
+      "table_name": "scm.ods_miniso_invc_20_stock_server_d_ip_forecast",
+      "partition_column": "ds",
+      "read_mode": "latest_snapshot",
+      "business_date_column": "stock_date",
+      "grain_columns": ["ds", "stock_key"],
+      "required_fields": [
+        "ds", "stock_key", "stock_date", "sku_code", "sku_name", "stock_type", "stock_sub_type",
+        "inventory_type", "business_type", "partition_code", "entity_code", "org_code", "stock_batch_no",
+        "ref_stock_batch_line", "total_stock", "usable_stock", "occupy_stock", "intransit_stock",
+        "transfer_occupy_stock", "transfer_intransit_stock", "exception_reason", "department_group_code",
+        "create_time", "update_time"
+      ],
+      "key_columns": ["ds", "stock_key"],
+      "sku_column": "sku_code",
+      "date_columns": ["ds", "stock_date", "create_time", "update_time"]
+    },
+    {
+      "table_name": "scm.dws_rpt_store_goods_sale_stock_query_df_ip_forecast",
+      "partition_column": "ds",
+      "read_mode": "partition_range",
+      "business_date_column": "ds",
+      "grain_columns": ["ds", "store_code", "sku_code"],
+      "required_fields": [
+        "ds", "sku_code", "sku_name", "store_code", "store_name", "first_store_arrival_time",
+        "national_first_arrival_time", "stock_itm_cnt", "stock_available_itm_cnt", "onway_qty",
+        "display3_code", "display3_name", "total_pcs_std", "total_sku_std", "deep", "out_of_stock_flag",
+        "in_stock_not_displayed_flag"
+      ],
+      "key_columns": ["ds", "store_code", "sku_code"],
+      "sku_column": "sku_code",
+      "store_column": "store_code",
+      "date_columns": ["ds", "first_store_arrival_time", "national_first_arrival_time"]
+    },
+    {
+      "table_name": "scm.sap_ztmm135_ip_forecast",
+      "partition_column": "ds",
+      "read_mode": "partition_range",
+      "business_date_column": "arrival_date",
+      "grain_columns": ["purchase_order_no", "purchase_order_line_no", "sku_code"],
+      "required_fields": [
+        "ds", "purchase_order_no", "purchase_order_line_no", "order_type", "order_type_desc",
+        "demand_type", "demand_type_desc", "changed_date", "approval_date", "confirm_date", "sku_code",
+        "sku_name", "supplier_code", "supplier_name", "target_qty", "received_qty", "unreceived_qty",
+        "purchase_unit", "contract_unit_price", "price_currency", "arrival_date", "document_status",
+        "approval_status_desc", "factory_code", "purchase_suggestion_no", "deletion_flag"
+      ],
+      "key_columns": ["ds", "purchase_order_no", "purchase_order_line_no", "sku_code"],
+      "sku_column": "sku_code",
+      "date_columns": ["ds", "changed_date", "approval_date", "confirm_date", "arrival_date"]
+    },
+    {
+      "table_name": "scm.sap_ztmm135_supplier_sku_profile_ip_forecast",
+      "partition_column": "ds",
+      "read_mode": "latest_snapshot",
+      "business_date_column": "ds",
+      "grain_columns": ["ds", "supplier_code", "sku_code"],
+      "required_fields": [
+        "ds", "supplier_code", "supplier_name", "sku_code", "sku_name", "cate_level1_code",
+        "cate_level1_name", "cate_level4_code", "cate_level4_name", "target_qty", "received_qty",
+        "receipt_fulfillment_rate", "purchase_order_count", "multi_supplier_flag"
+      ],
+      "key_columns": ["ds", "supplier_code", "sku_code"],
+      "sku_column": "sku_code",
+      "date_columns": ["ds"]
+    },
+    {
+      "table_name": "scm.dim_goods_info_pack_spec_ip_forecast",
+      "partition_column": "ds",
+      "read_mode": "latest_snapshot",
+      "business_date_column": "ds",
+      "grain_columns": ["ds", "sku_code"],
+      "required_fields": ["ds", "sku_code", "sku_name", "spu_id", "goods_unit", "pkg_unit", "box_unit"],
+      "key_columns": ["ds", "sku_code"],
+      "sku_column": "sku_code",
+      "date_columns": ["ds"]
+    },
+    {
+      "table_name": "scm.dws_trd_offline_order_goods_1d_member_profile_ip_forecast",
+      "partition_column": "ds",
+      "read_mode": "latest_snapshot",
+      "business_date_column": "stat_month",
+      "grain_columns": ["ds", "stat_month", "sku_code"],
+      "required_fields": [
+        "ds", "stat_month", "sku_code", "sku_name", "age_under_18_rate", "age_18_24_rate",
+        "age_25_34_rate", "age_35_44_rate", "age_45_plus_rate", "age_unknown_rate",
+        "member_level_rate_json", "male_rate", "female_rate", "member_count"
+      ],
+      "key_columns": ["ds", "stat_month", "sku_code"],
+      "sku_column": "sku_code",
+      "date_columns": ["ds", "stat_month"]
+    }
+  ]
+}

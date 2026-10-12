@@ -1,0 +1,3 @@
+ds,stock_key,stock_date,sku_code,total_stock,usable_stock,intransit_stock
+2025-01-01,STOCK01,2025-01-01,SKU001,12,10,2
+

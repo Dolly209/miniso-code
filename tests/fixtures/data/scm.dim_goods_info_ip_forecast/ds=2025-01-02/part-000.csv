@@ -1,0 +1,4 @@
+ds,sku_code,sku_name,ip_code,first_sale_date
+2025-01-02,SKU001,Synthetic One,IP_A,2025-01-01
+2025-01-02,SKU003,Synthetic Three,IP_C,2025-01-02
+
