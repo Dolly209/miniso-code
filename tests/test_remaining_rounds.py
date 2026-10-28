@@ -8,10 +8,11 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pytest
 
-from comparable import select_comparables
+from comparable import preselect_comparables, select_comparables, summarize_restoration
 from db.result_writer import ResultWriter
-from factors import calculate_demand_adjustments
+from factors import build_internal_small_factors, calculate_demand_adjustments
 from first_order import calculate_first_order
 from placement import plan_placement
 from reorder import calculate_reorder
@@ -39,6 +40,46 @@ def test_algorithm_layers_do_not_reference_physical_sources() -> None:
             text = path.read_text(encoding="utf-8")
             assert "scm." not in text, path
             assert "data.parquet_repository" not in text, path
+
+
+def test_internal_factors_preserve_round4_category_when_enriching_attributes() -> None:
+    features = pd.DataFrame(
+        [
+            {
+                "sku_code": "S1",
+                "cate_level4_code": "L4",
+                "manage_cate_name": "玩具",
+                "sales_unit_type": "blind_box",
+                "release_dt": "2026-01-01",
+                "historical_velocity": 2.0,
+            }
+        ]
+    )
+    restored = pd.DataFrame(
+        [
+            {
+                "sku_code": "S1",
+                "cate_level4_code": "L4",
+                "week_end": pd.Timestamp("2026-01-04") + pd.Timedelta(weeks=week),
+                "restored_natural_sales": float(10 + week),
+                "restored_exposure_days": 7.0,
+            }
+            for week in range(12)
+        ]
+    )
+    result = build_internal_small_factors(
+        features=features,
+        restored_weekly=restored,
+        standard_ip_membership=pd.DataFrame(
+            [{"sku_code": "S1", "ip_code": "IP1"}]
+        ),
+        cutoff_date="2026-09-30",
+        competition_window_days=90,
+    )
+
+    assert result.loc[0, "category_prosperity_status"] == "v3_2_pr01_pr02"
+    assert pd.notna(result.loc[0, "category_prosperity_l4"])
+    assert pd.notna(result.loc[0, "category_prosperity_manage"])
     for path in (ROOT / "scripts").glob("*.py"):
         text = path.read_text(encoding="utf-8")
         assert "data.parquet_repository" not in text, path
@@ -79,6 +120,94 @@ def test_m1_path_priority_hard_filter_and_weight_sum() -> None:
     assert selected["alpha_weight"].sum() == 1.0
     c2 = result.candidates.loc[result.candidates["candidate_sku_code"] == "C2"].iloc[0]
     assert c2["hard_filter_pass"] == 0
+
+
+def test_m1_preselection_fixes_top3_before_restoration() -> None:
+    targets, products, ips, _ = _m1_inputs()
+    extras = pd.DataFrame(
+        [
+            {
+                "sku_code": f"C{index}",
+                "market_code": "CN",
+                "sales_unit_type": "blind_box",
+                "cate_level2_code": "2",
+                "cate_level3_code": "3",
+                "cate_level4_code": "4",
+                "retail_price": 20 + index,
+                "pkg_unit": 6,
+                "release_dt": f"2025-0{index}-01",
+            }
+            for index in range(3, 7)
+        ]
+    )
+    products = pd.concat([products, extras], ignore_index=True)
+    ips = pd.concat(
+        [
+            ips,
+            pd.DataFrame(
+                [{"sku_code": f"C{index}", "ip_code": "IP1"} for index in range(3, 7)]
+            ),
+        ],
+        ignore_index=True,
+    )
+    candidates = pd.DataFrame({"sku_code": [f"C{index}" for index in range(1, 7)]})
+
+    result = preselect_comparables(
+        targets=targets,
+        candidates=candidates,
+        products=products,
+        ip_membership=ips,
+        config=PARAMETERS["comparable"],
+    )
+
+    selected = result.candidates.loc[result.candidates["selected"].eq(1)]
+    assert len(selected) == 3
+    assert set(selected["path_code"]) == {"PATH1"}
+    assert selected["quality_score_status"].eq("deferred_until_m2").all()
+    assert selected["historical_velocity"].isna().all()
+
+
+def test_m1_post_restore_does_not_introduce_unselected_candidate() -> None:
+    targets, products, ips, restored = _m1_inputs()
+    allowlist = pd.DataFrame(
+        [{"target_sku_code": "T", "candidate_sku_code": "C1"}]
+    )
+
+    result = select_comparables(
+        targets=targets,
+        products=products,
+        ip_membership=ips,
+        restored_summary=restored,
+        config=PARAMETERS["comparable"],
+        candidate_allowlist=allowlist,
+    )
+
+    assert set(result.candidates["candidate_sku_code"]) == {"C1"}
+
+
+def test_m1_summary_excludes_unreliable_stock_grain_candidates() -> None:
+    restored = pd.DataFrame(
+        [
+            {
+                "sku_code": "GOOD",
+                "lifecycle_week": 1,
+                "v_neutral": 5.0,
+                "n_eff": 7.0,
+                "stock_grain_unreliable": False,
+            },
+            {
+                "sku_code": "BAD",
+                "lifecycle_week": 1,
+                "v_neutral": 2.0,
+                "n_eff": 0.0,
+                "stock_grain_unreliable": True,
+            },
+        ]
+    )
+
+    summary = summarize_restoration(restored)
+
+    assert summary["sku_code"].tolist() == ["GOOD"]
 
 
 def _placement_inputs() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
@@ -184,9 +313,17 @@ def test_m3_to_m7_and_reorder_formula_chain() -> None:
         config=PARAMETERS["factors"],
     )
     assert 0.5 <= factors.adjustments.iloc[0]["C_demand"] <= 2.0
-    product_target = pd.DataFrame([{"sku_code": "T", "copyright_category": "自有IP"}])
+    product_target = pd.DataFrame(
+        [
+            {
+                "sku_code": "T",
+                "copyright_category": "自有IP",
+                "sales_unit_type": "open_box",
+            }
+        ]
+    )
     constraints = pd.DataFrame(
-        [{"sku_code": "T", "moq": 10, "mold_redline": 10, "case_pack": 2, "lead_weeks": 1, "decision_weeks": 1, "buffer_weeks": 0, "strategy": "normal"}]
+        [{"sku_code": "T", "moq": 10, "mold_redline": 10, "case_pack": 2, "lead_weeks": 1, "decision_weeks": 1, "buffer_weeks": 0, "strategy": "normal", "series_pack_count": 6, "unit_conversion_confirmed": True}]
     )
     first = calculate_first_order(
         targets=product_target,
@@ -200,13 +337,52 @@ def test_m3_to_m7_and_reorder_formula_chain() -> None:
     )
     assert first.decisions.iloc[0]["Q_feas"] >= 10
     assert first.decisions.iloc[0]["Q_feas"] % 2 == 0
+    assert first.decisions.iloc[0]["order_uom"] == "piece"
+    assert first.decisions.iloc[0]["Q_feas_order_uom"] == first.decisions.iloc[0]["Q_feas"]
+    decision = first.decisions.iloc[0]
+    assert decision["D_demand_base"] == pytest.approx(decision["D_sell"])
+    assert decision["D_demand_adjusted"] == pytest.approx(decision["D_first"])
+    assert decision["Q_base"] == pytest.approx(
+        decision["D_demand_base"]
+        + decision["SS_first"]
+        + decision["minimum_floor_uplift_base"]
+        + decision["Display_first"]
+    )
+    assert decision["demand_quantity_definition"] == (
+        "pure_sales_demand_inside_W_cover"
+    )
+    assert decision["demand_grade"] in {"C", "B", "A", "S"}
+    assert decision["supply_grade"] == decision["grade"]
+
+    blind_first = calculate_first_order(
+        targets=product_target.assign(sales_unit_type="blind_box"),
+        placement_plan=placement.store_plan,
+        demand_curve=placement.demand_curve,
+        adjustments=factors.adjustments,
+        comparable_summary=comparable_summary,
+        config=PARAMETERS["first_order"],
+        factor_config=PARAMETERS["factors"],
+        constraints=constraints,
+    )
+    assert blind_first.decisions.iloc[0]["order_uom"] == "confirmed_series_pack"
+    assert blind_first.decisions.iloc[0]["Q_feas_order_uom"] == np.ceil(
+        blind_first.decisions.iloc[0]["Q_feas"] / 6
+    )
 
     cutoff = datetime(2026, 1, 7, 23, 59, tzinfo=timezone(timedelta(hours=8)))
     actual_rows = []
     for store in first.store_targets.itertuples(index=False):
         for day in range(7):
             actual_rows.append(
-                {"sku_code": "T", "store_code": store.store_code, "store_tier": store.store_tier, "business_day": (cutoff.date() - timedelta(days=day)), "actual_sales": 1.0, "e_stock": 1, "e_display": 1}
+                {
+                    "sku_code": "T",
+                    "store_code": store.store_code,
+                    "store_tier": store.store_tier,
+                    "business_day": cutoff.date() - timedelta(days=day),
+                    "actual_sales": 1.0,
+                    "e_stock": pd.NA if day == 0 else 1,
+                    "e_display": pd.NA if day == 0 else 1,
+                }
             )
     reorder_constraints = pd.DataFrame(
         [{"sku_code": "T", "launch_date": "2026-01-01", "reorder_moq": 1, "case_pack": 1, "reorder_lead_days": 1, "store_inventory": 0, "warehouse_inventory": 0, "hard_end_date": "2026-02-28"}]
@@ -223,6 +399,8 @@ def test_m3_to_m7_and_reorder_formula_chain() -> None:
     assert reorder.decisions.iloc[0]["M_dev"] > 0
     assert reorder.decisions.iloc[0]["QR_feas"] >= 0
     assert reorder.decisions.iloc[0]["action"] in {"freeze", "observe", "reorder", "remold"}
+    assert reorder.diagnostics["stockout_lost"].sum() == 0
+    assert reorder.diagnostics["nondisplay_lost"].sum() == 0
 
 
 def test_placement_runs_with_versioned_initial_parameters_by_default() -> None:
@@ -237,7 +415,13 @@ def test_placement_runs_with_versioned_initial_parameters_by_default() -> None:
     )
     assert result.store_plan["selected"].sum() >= 1
     assert "VERSIONED_INITIAL_PARAMETER" in set(result.compliance["status"])
-    assert "EMPIRICAL_INITIAL_MODEL" in set(result.compliance["status"])
+    launch_row = result.compliance.loc[
+        result.compliance["concept"].eq(
+            "launch_window_prior_and_performance_probability"
+        )
+    ].iloc[0]
+    assert launch_row["source"] == "missing_launch_window_evidence_versioned_prior"
+    assert result.summary.iloc[0]["evidence_supported_store_count"] == 0
 
 
 def test_placement_missing_execution_is_not_replaced_by_half_score() -> None:
@@ -256,7 +440,15 @@ def test_placement_missing_execution_is_not_replaced_by_half_score() -> None:
     assert result.store_plan["category_fit"].isna().all()
     statuses = set(result.compliance["status"])
     assert "VERSIONED_INITIAL_PARAMETER" in statuses
-    assert "EMPIRICAL_INITIAL_MODEL" in statuses
+    assert (
+        result.compliance.loc[
+            result.compliance["concept"].eq(
+                "launch_window_prior_and_performance_probability"
+            ),
+            "source",
+        ].iloc[0]
+        == "missing_launch_window_evidence_versioned_prior"
+    )
     assert "MISSING_RENORMALIZED" in statuses
 
 
@@ -385,6 +577,7 @@ def test_train_uses_oof_and_test_replay_is_separate() -> None:
                 "label": float(10 + index * 2),
                 "feature__x": float(index),
                 "feature__z": float(index % 3),
+                "copyright_category": "授权IP" if index == 13 else "自有IP",
             }
         )
     frame = pd.DataFrame(rows)
@@ -401,9 +594,52 @@ def test_train_uses_oof_and_test_replay_is_separate() -> None:
         frame,
         result.model,
         interval_log_quantiles=result.report["oof_log_residual_quantiles"],
+        grade_thresholds={
+            "own_ip": {"C_max": 20, "B_max": 30, "A_max": 40},
+            "licensed_ip": {"C_max": 25, "B_max": 35, "A_max": 45},
+        },
     )
     assert len(test_predictions) == 3
     assert report["test_did_not_select_model"] is True
+    assert set(test_predictions["grade_threshold_type"]) == {
+        "own_ip",
+        "licensed_ip",
+    }
+
+
+def test_prelaunch_oof_preserves_independent_checkpoint_identity() -> None:
+    rows = []
+    start = pd.Timestamp("2024-01-01")
+    for index in range(15):
+        sku = f"P{index:02d}"
+        for lead in (5, 4, 3):
+            rows.append(
+                {
+                    "sku_code": sku,
+                    "prediction_checkpoint_key": f"{sku}@M{lead}",
+                    "prediction_checkpoint": f"M{lead}",
+                    "lead_months": lead,
+                    "decision_cutoff_time": (
+                        start + pd.Timedelta(days=index) - pd.DateOffset(months=lead)
+                    ).isoformat(),
+                    "first_actual_sale_date": (start + pd.Timedelta(days=index)).date(),
+                    "split": "Train" if index < 12 else "Test",
+                    "label": float(100 + index),
+                    "feature__x": float(index + lead / 10),
+                }
+            )
+    result = rolling_oof_train(
+        pd.DataFrame(rows),
+        feature_columns=["feature__x"],
+        n_time_blocks=5,
+        ridge_grid=[0.1],
+        half_life_grid=["infinity"],
+    )
+    assert result.oof_predictions["prediction_checkpoint_key"].is_unique
+    assert set(result.oof_predictions["prediction_checkpoint"]) == {"M5", "M4", "M3"}
+    assert result.report["sample_grain"] == "sku_x_independent_prelaunch_checkpoint"
+    assert result.report["train_rows"] == 36
+    assert result.report["train_skus"] == 12
 
 
 def test_result_writer_uses_one_append_only_transaction() -> None:

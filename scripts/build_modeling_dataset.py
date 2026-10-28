@@ -15,7 +15,10 @@ from _pipeline_common import add_execution_arguments, print_dry_run  # noqa: E40
 from common.logging_utils import log_exception, setup_run_logger  # noqa: E402
 from config.settings import AppConfig  # noqa: E402
 from data.artifacts import StageArtifactStore  # noqa: E402
-from data.modeling_dataset import assemble_modeling_dataset  # noqa: E402
+from data.modeling_dataset import (  # noqa: E402
+    assemble_modeling_dataset,
+    assess_modeling_readiness,
+)
 
 
 def _feature_spec(value: str) -> tuple[str, Path]:
@@ -30,9 +33,32 @@ def _feature_spec(value: str) -> tuple[str, Path]:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Assemble the standardized ROUND 8 modeling dataset.")
     parser.add_argument("--cohort-file", type=Path, default=Path("artifacts/round3_dataset/cohort.csv"))
-    parser.add_argument("--label-file", type=Path, default=None)
-    parser.add_argument("--label-column", default="sales_26w_qty")
+    parser.add_argument(
+        "--label-file",
+        type=Path,
+        required=True,
+        help=(
+            "Output of build_first_order_labels.py containing one mature "
+            "D_first_ref value per SKU."
+        ),
+    )
+    parser.add_argument("--label-column", default="D_first_ref")
+    parser.add_argument(
+        "--dataset-role",
+        choices=("full", "oof_train", "final_train_test"),
+        default="full",
+        help=(
+            "oof_train builds the B1-B5 Train-only upstream snapshot; "
+            "final_train_test builds the separately replayed all-Train plus "
+            "locked-Test snapshot."
+        ),
+    )
     parser.add_argument("--feature-artifact", action="append", type=_feature_spec, default=[])
+    parser.add_argument(
+        "--allow-unverified-point-in-time-smoke",
+        action="store_true",
+        help="Allow a non-formal smoke dataset when historical feature cutoffs are unavailable.",
+    )
     add_execution_arguments(parser, default_output="artifacts/training")
     return parser.parse_args()
 
@@ -41,7 +67,11 @@ def main() -> int:
     args = parse_args()
     config = AppConfig.load(PROJECT_ROOT)
     logger, log_path = setup_run_logger("build_modeling_dataset", config.log_dir, config.timezone)
-    outputs = ["modeling_dataset.csv", "modeling_dataset_report.json"]
+    outputs = [
+        "modeling_dataset.csv",
+        "modeling_dataset_report.json",
+        "training_readiness_report.json",
+    ]
     if args.dry_run:
         print_dry_run("modeling dataset assembly", args, outputs)
         return 0
@@ -51,29 +81,79 @@ def main() -> int:
             PROJECT_ROOT / args.cohort_file,
             sku_codes=args.sku_code, limit_skus=args.limit_skus,
         )
-        labels = None if args.label_file is None else artifact.read_frame(PROJECT_ROOT / args.label_file)
+        if args.dataset_role == "oof_train":
+            cohort = cohort.loc[
+                cohort["split"].astype(str).str.lower().eq("train")
+            ].copy()
+        if args.label_column == "sales_26w_qty":
+            raise ValueError(
+                "sales_26w_qty is not a first-order training label; run "
+                "build_first_order_labels.py and use --label-column D_first_ref"
+            )
+        labels = artifact.read_frame(PROJECT_ROOT / args.label_file)
         features = [
             (namespace, artifact.read_frame(PROJECT_ROOT / path))
             for namespace, path in args.feature_artifact
         ]
+        readiness = assess_modeling_readiness(
+            cohort=cohort,
+            feature_frames=features,
+            label_frame=labels,
+            label_column=args.label_column,
+            required_splits=(
+                ("train",)
+                if args.dataset_role == "oof_train"
+                else ("train", "test")
+            ),
+        )
+        output_dir = PROJECT_ROOT / args.output_dir
+        readiness.update({
+            "spec_version": "3.2",
+            "generated_at_utc": datetime.now(timezone.utc).isoformat(),
+            "decision_cutoff_time": args.decision_cutoff_time.isoformat(),
+            "allow_unverified_point_in_time_smoke": args.allow_unverified_point_in_time_smoke,
+            "dataset_role": args.dataset_role,
+        })
+        artifact.write_json(output_dir / outputs[2], readiness)
+        if readiness["status"] != "ready_for_train_oof_and_locked_test" and not args.allow_unverified_point_in_time_smoke:
+            raise ValueError(
+                "modeling dataset is not ready for formal V3.2 training: "
+                + "; ".join(readiness["blocking_reasons"])
+                + f"; see {output_dir / outputs[2]}"
+            )
         dataset = assemble_modeling_dataset(
             cohort=cohort, feature_frames=features, label_frame=labels,
             label_column=args.label_column,
         )
-        output_dir = PROJECT_ROOT / args.output_dir
+        dataset["point_in_time_verified"] = (
+            readiness["status"] == "ready_for_train_oof_and_locked_test"
+        )
+        dataset["modeling_dataset_mode"] = (
+            "formal_point_in_time"
+            if readiness["status"] == "ready_for_train_oof_and_locked_test"
+            else "unverified_smoke_only"
+        )
         artifact.write_frame(output_dir / outputs[0], dataset)
         artifact.write_json(output_dir / outputs[1], {
             "spec_version": "3.2", "status": "implemented_output",
             "generated_at_utc": datetime.now(timezone.utc).isoformat(),
             "decision_cutoff_time": args.decision_cutoff_time.isoformat(),
             "rows": len(dataset), "skus": dataset["sku_code"].nunique(),
-            "label_source": str(args.label_file or args.cohort_file),
+            "label_source": str(args.label_file),
             "label_column": args.label_column,
-            "label_warning": (
-                "sales_26w_qty is a demand-learning label, not a universal executed first-order quantity"
-                if args.label_column == "sales_26w_qty" else "external mature label supplied"
+            "label_definition": (
+                "Round 4 restored_natural_sales summed within each SKU-specific "
+                "W_cover; clean_sales_qty is retained as observed-sales audit"
+            ),
+            "sales_26w_policy": (
+                "maturity/distribution/Train-only long-tail weighting only; "
+                "never a first-order label or prelaunch feature"
             ),
             "feature_artifacts": {name: str(path) for name, path in args.feature_artifact},
+            "dataset_role": args.dataset_role,
+            "training_readiness_report": outputs[2],
+            "training_readiness_status": readiness["status"],
+            "formal_training_allowed": readiness["status"] == "ready_for_train_oof_and_locked_test",
         })
         logger.info("modeling dataset complete rows=%s", len(dataset))
     except Exception as exc:

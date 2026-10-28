@@ -27,7 +27,7 @@ def test_database_config_never_uses_non_miniso_database(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     values = {
-        "MINISO_DB_HOST": "db.internal",
+        "MINISO_DB_HOST": "db.example.test",
         "MINISO_DB_PORT": "3306",
         "MINISO_DB_USER": "app",
         "MINISO_DB_PASSWORD": "secret",
@@ -41,7 +41,7 @@ def test_database_config_never_uses_non_miniso_database(
 
 def test_database_config_rejects_root(monkeypatch: pytest.MonkeyPatch) -> None:
     values = {
-        "MINISO_DB_HOST": "db.internal",
+        "MINISO_DB_HOST": "db.example.test",
         "MINISO_DB_PORT": "3306",
         "MINISO_DB_USER": "root",
         "MINISO_DB_PASSWORD": "synthetic",
@@ -57,7 +57,7 @@ def test_v3_2_training_defaults() -> None:
     project_root = Path(__file__).resolve().parents[1]
     config = AppConfig.load(project_root)
     assert config.spec_version == "3.2"
-    assert str(config.server_project_root) == "/tmp/code/xujing"
+    assert str(config.server_project_root) == "."
     assert config.training.n_time_blocks == 5
     assert config.training.num_folds == 4
     assert config.training.label_distribution_window_weeks == 26
@@ -74,4 +74,9 @@ def test_v3_2_training_defaults() -> None:
     assert config.restoration.stockout_flag_share_threshold == 0.4
     assert config.restoration.shrinkage_k_exposure_days == 7.0
     assert config.restoration.huber_delta == 1.345
+    assert config.restoration.huber_max_iter == 100
+    assert config.restoration.huber_convergence_tolerance == 1e-6
     assert config.restoration.minimum_price_observations == 30
+    assert config.restoration.stock_grain_stockout_share_threshold == 0.98
+    assert config.restoration.stock_grain_min_open_days == 28
+    assert config.restoration.stock_grain_min_positive_sales_days == 3

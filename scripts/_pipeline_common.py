@@ -54,6 +54,7 @@ def dry_run_payload(stage: str, args: argparse.Namespace, outputs: list[str]) ->
         ),
         "sku_codes": list(getattr(args, "sku_code", [])),
         "limit_skus": getattr(args, "limit_skus", None),
+        "decision_age_days": getattr(args, "decision_age_days", None),
         "planned_outputs": outputs,
     }
 

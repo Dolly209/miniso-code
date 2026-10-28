@@ -1,11 +1,14 @@
 {
   "spec_version": "3.2",
-  "parameter_version": "v3.2-local-20261011-pr04-cover-example",
-  "rule_version": "v3.2-local-20261011",
+  "parameter_version": "v3.2-local-20261025-audit-and-placement-fix-v1",
+  "rule_version": "v3.2-local-20261025-audit-and-placement-fix-v1",
   "comparable": {
     "path_priority": ["PATH0", "PATH1", "PATH2", "PATH3", "PATH4"],
     "top_k_internal": 3,
     "top_m_external": 1,
+    "minimum_mature_weeks": 4,
+    "emotion_similarity_threshold": 0.50,
+    "emotion_top_overlap_threshold": 0.20,
     "softmax_temperature": 0.15,
     "base_reliability": {"PATH0": 100, "PATH1": 80, "PATH2": 65, "PATH3": 50, "PATH4": 20},
     "similarity_weights": {
@@ -18,6 +21,27 @@
       "recent": 0.06
     },
     "external_coefficient_bounds": [0.70, 1.30],
+    "external_media": {
+      "prelaunch_days": 30,
+      "sentiment_coverage_min": 0.50,
+      "minimum_snapshot_days_for_trend": 2,
+      "coefficient_slope": 0.15,
+      "score_difference_bounds": [-2.0, 2.0],
+      "feature_weights": {
+        "post_count": 1.0,
+        "interaction_count": 1.0,
+        "unique_author_count": 0.75,
+        "koc_author_count": 0.50,
+        "kol_author_count": 0.50,
+        "view_count": 0.50,
+        "post_growth_30d": 0.75,
+        "interaction_growth_30d": 0.75,
+        "interaction_stability": 0.50,
+        "positive_post_share": 0.50,
+        "negative_post_share": 0.50
+      },
+      "parameter_status": "versioned_initial_mapping_pending_train_only_oof_calibration"
+    },
     "static_base_velocity": 1.0
   },
   "placement": {
@@ -31,10 +55,14 @@
       "purpose": "versioned initial values used until Train calibration or business overrides are supplied",
       "launch_window_days": 28,
       "v_min_when_no_history": 0.0,
-      "inv_max": 0.40,
+      "inv_max_days": 28.0,
+      "inv_max_days_status": "versioned_initial_days_of_supply_pending_train_calibration",
+      "stock_pressure_recent_weeks": 4,
       "tau_tier": 0.50,
       "path4_anchor_velocity": 1.0,
       "path4_placement_rate": 0.02,
+      "missing_launch_evidence_placement_rate": 0.02,
+      "missing_launch_evidence_placement_rate_status": "versioned_conservative_initial_parameter_pending_source_backfill_or_train_calibration",
       "curve_min_week1_velocity": 0.001,
       "curve_max_factor": 10.0,
       "curve_min_observed_weeks": 4,
@@ -44,9 +72,9 @@
   },
   "factors": {
     "small_factor_weights": {
-      "IP": {"ip_breadth": 0.25, "member_count": 0.35, "member_female_rate": 0.20, "member_young_rate": 0.20},
-      "PRODUCT": {"retail_price": 0.25, "pack_size": 0.20, "lifecycle_persistence": 0.20, "historical_velocity": 0.35},
-      "OPERATION": {"supplier_fulfillment": 0.45, "multi_supplier": 0.15, "exposure_quality": 0.40}
+      "IP": {"ip_social_volume": 0.30, "ip_social_momentum": 0.25, "ip_fan_asset": 0.20, "category_prosperity": 0.25},
+      "PRODUCT": {"form_play_fit": 0.40, "lifecycle_persistence": 0.35, "design_innovation": 0.25},
+      "OPERATION": {"marketing_resource": 1.00}
     },
     "group_weights": {"IP": 0.35, "PRODUCT": 0.40, "OPERATION": 0.25},
     "coefficient_bounds": {"IP": [0.70, 1.40], "PRODUCT": [0.70, 1.40], "OPERATION": [0.70, 1.40]},
@@ -55,27 +83,43 @@
     "price_bounds": [0.85, 1.15],
     "demand_bounds": [0.50, 2.00],
     "winsor_quantiles": [0.01, 0.99],
-    "strategy_coefficients": {"normal": 1.0, "aggressive": 1.20, "conservative": 0.85}
+    "strategy_coefficients": {"normal": 1.0, "aggressive": 1.20, "conservative": 0.85},
+    "social_prelaunch_days": 30,
+    "social_momentum_days": 14,
+    "minimum_social_days": 7,
+    "same_social_source_disables_external_coefficient": true,
+    "competition_initial_rules": {
+      "same_ip_launch_window_days": 30,
+      "same_ip_effective_new_sku_threshold": 3,
+      "same_ip_coefficient": 0.85,
+      "parameter_status": "versioned_initial_requires_train_backtest"
+    }
   },
   "first_order": {
     "decision_weeks": 2,
     "buffer_weeks": 2,
     "lead_weeks": 6,
     "lifecycle_weeks": 26,
+    "max_unknown_exposure_rate_for_training": 0.05,
     "default_parameter_basis": {
       "source": "V3.2 section 6.1 parameter example; business-confirmed constraints override these defaults",
       "decision_weeks": 2,
       "buffer_weeks": 2,
       "lead_weeks": 6,
       "lifecycle_weeks": 26,
-      "example_cover_weeks_before_hard_end": 10
+      "example_cover_weeks_before_hard_end": 10,
+      "max_unknown_exposure_rate_for_training_source": "Versioned implementation threshold inherited from the Round 4 exposure-quality audit; V3.2 requires excluding large missing blocks but does not prescribe a numeric cutoff"
     },
     "safety_stock_quantile_by_tier": {"S": 0.90, "A": 0.85, "B": 0.80, "C": 0.75, "__UNKNOWN__": 0.80},
     "minimum_display_units": 0.0,
     "minimum_store_units": 0.0,
     "mold_redline_reference": 8000,
     "moq_reference": {"own_ip": 9000, "licensed_ip": 15000},
-    "grade_thresholds": {"C_max": 15000, "B_max": 30000, "A_max": 50000},
+    "grade_thresholds": {
+      "own_ip": {"C_max": 15000, "B_max": 30000, "A_max": 50000},
+      "licensed_ip": {"C_max": 15000, "B_max": 30000, "A_max": 50000},
+      "parameter_status": "V3.2_business_example_separate_versions_pending_calibration"
+    },
     "input_completeness_thresholds": {"high": 80, "medium": 60},
     "reliability_thresholds": {"high": 75, "medium": 55}
   },
@@ -91,10 +135,15 @@
     "cliff_ratio": 0.65,
     "sustained_min_days": 5,
     "default_reorder_lead_days": 21,
+    "default_next_review_days": 7,
     "default_reorder_moq": 3000,
     "default_case_pack": 1
   },
   "training": {
+    "sales_band_edges": [0, 500, 1000, 9000, 15000, 30000, 50000, 100000],
+    "comparable_temperature_grid": [0.10, 0.15, 0.25],
+    "comparable_top_k_grid": [1, 2, 3],
+    "similarity_regularization_grid": [0.0, 0.01, 0.10, 1.0],
     "ridge_grid": [0.0, 0.01, 0.1, 1.0, 10.0],
     "l1_ratio_grid": [0.0, 0.2, 0.5, 0.8],
     "half_life_weeks": [26, 52, 78, "infinity"],
@@ -106,6 +155,7 @@
     "domestic_moq": "reference_requires_business_confirmation",
     "capacity_calendar": "missing_requires_business_input",
     "lead_time": "reference_requires_business_confirmation",
+    "next_review_days": "versioned_7_day_default_requires_business_confirmation",
     "case_pack_conversion": "disabled_until_unit_confirmed",
     "promotion_flag": "missing_neutral"
   }

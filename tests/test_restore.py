@@ -9,19 +9,47 @@ import pytest
 
 from config.settings import AppConfig
 from restore.historical import (
+    FittedRestorationModel,
     _aggregate_weekly,
     assign_event_codes,
     build_daily_panel,
     build_restoration_quality_report,
+    build_restoration_quality_report_from_summary,
     build_restoration_result,
+    fit_and_restore_weekly,
+    fit_restoration_model,
     neutralize_period_effects,
     normalize_order_lines,
+    summarize_daily_quality_inputs,
     write_restoration_artifacts,
 )
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 CUTOFF = datetime.fromisoformat("2025-01-21T23:59:59+08:00")
+
+
+def test_restoration_model_artifact_round_trip() -> None:
+    original = FittedRestorationModel(
+        models={
+            "__GLOBAL__": (
+                {"intercept": 1.25, "price_elasticity": -0.2},
+                {"SKU1": 0.1},
+                {"STORE1": -0.05},
+            )
+        },
+        category_p99={"C1||*": 9.0},
+        global_p99=10.0,
+        report={
+            "model_id": "vmodel-test",
+            "train_end_time": "2025-01-01T23:59:59+08:00",
+            "abnormal_order_thresholds": {"__GLOBAL__": 3.0},
+        },
+    )
+
+    restored = FittedRestorationModel.from_dict(original.as_dict())
+
+    assert restored == original
 
 
 def _sales_row(
@@ -153,6 +181,219 @@ def test_weekly_aggregation_keeps_nullable_exposure_out_of_boolean_masks() -> No
     assert weekly.loc[0, "n_eff"] == 1.0
 
 
+def test_unknown_exposure_sales_are_preserved_but_not_used_for_speed_fit() -> None:
+    config = AppConfig.load(PROJECT_ROOT).restoration
+    panel = pd.DataFrame(
+        [
+            {
+                "sku_code": "SKU1",
+                "cate_level4_code": "TOY",
+                "store_code": "S1",
+                "store_business_state": "NORMAL",
+                "store_level": "A",
+                "store_tier": "NORMAL|A",
+                "lifecycle_week": 1,
+                "week_start": date(2025, 1, 1),
+                "week_end": date(2025, 1, 7),
+                "complete_week": True,
+                "business_day": date(2025, 1, 1),
+                "e_open": 1.0,
+                "e_stock": 1.0,
+                "e_display": 1.0,
+                "e_total": 1.0,
+                "anomaly_confidence": 1.0,
+                "reported_sale_qty": 2.0,
+                "clean_sale_qty": 2.0,
+                "abnormal_sale_qty": 0.0,
+                "abnormal_order_count": 0,
+                "price_log_ratio": 0.0,
+                "promotion_price_proxy": False,
+            },
+            {
+                "sku_code": "SKU1",
+                "cate_level4_code": "TOY",
+                "store_code": "S1",
+                "store_business_state": "NORMAL",
+                "store_level": "A",
+                "store_tier": "NORMAL|A",
+                "lifecycle_week": 1,
+                "week_start": date(2025, 1, 1),
+                "week_end": date(2025, 1, 7),
+                "complete_week": True,
+                "business_day": date(2025, 1, 2),
+                "e_open": 1.0,
+                "e_stock": pd.NA,
+                "e_display": pd.NA,
+                "e_total": pd.NA,
+                "anomaly_confidence": 1.0,
+                "reported_sale_qty": 3.0,
+                "clean_sale_qty": 3.0,
+                "abnormal_sale_qty": 0.0,
+                "abnormal_order_count": 0,
+                "price_log_ratio": 0.0,
+                "promotion_price_proxy": False,
+            },
+        ]
+    )
+    for column in ("e_open", "e_stock", "e_display", "e_total"):
+        panel[column] = panel[column].astype("Float64")
+
+    weekly, _ = fit_and_restore_weekly(
+        panel,
+        config=config,
+        fit_skus={"SKU1"},
+        training_weights={"SKU1": 1.0},
+    )
+    row = weekly.iloc[0]
+
+    assert row["unknown_exposure_clean_sales_qty"] == 3.0
+    assert row["unmodeled_observed_sales_qty"] == 3.0
+    assert row["price_neutral_observed_sales"] == 5.0
+    assert row["restored_natural_sales"] == 5.0
+    assert row["model_natural_sales"] == 2.0
+    assert row["v_obs"] == 14.0
+
+
+def test_negative_signed_store_week_is_preserved_but_demand_is_floored() -> None:
+    config = AppConfig.load(PROJECT_ROOT).restoration
+    rows: list[dict[str, object]] = []
+    for sku_code, quantity in (("FIT", 2.0), ("RETURN_ONLY", -1.0)):
+        rows.append(
+            {
+                "sku_code": sku_code,
+                "cate_level4_code": "TOY",
+                "store_code": "S1",
+                "store_business_state": "NORMAL",
+                "store_level": "A",
+                "store_tier": "NORMAL|A",
+                "lifecycle_week": 1,
+                "week_start": date(2025, 1, 1),
+                "week_end": date(2025, 1, 7),
+                "complete_week": True,
+                "business_day": date(2025, 1, 1),
+                "e_open": 1.0,
+                "e_stock": 1.0,
+                "e_display": 1.0,
+                "e_total": 1.0,
+                "anomaly_confidence": 1.0,
+                "reported_sale_qty": quantity,
+                "clean_sale_qty": quantity,
+                "abnormal_sale_qty": 0.0,
+                "abnormal_order_count": 0,
+                "price_log_ratio": 0.0,
+                "promotion_price_proxy": False,
+            }
+        )
+    panel = pd.DataFrame(rows)
+    for column in ("e_open", "e_stock", "e_display", "e_total"):
+        panel[column] = panel[column].astype("Float64")
+
+    weekly, _ = fit_and_restore_weekly(
+        panel,
+        config=config,
+        fit_skus={"FIT", "RETURN_ONLY"},
+        training_weights={"FIT": 1.0, "RETURN_ONLY": 1.0},
+    )
+    returned = weekly.loc[weekly["sku_code"] == "RETURN_ONLY"].iloc[0]
+
+    assert returned["clean_sales_qty"] == -1.0
+    assert returned["price_neutral_observed_sales"] == -1.0
+    assert returned["raw_restored_natural_sales"] == -1.0
+    assert returned["negative_net_sales_floor_adjustment"] == 1.0
+    assert bool(returned["negative_net_sales_floor_applied"])
+    assert returned["restored_natural_sales"] == 0.0
+    assert returned["model_natural_sales"] == 0.0
+    assert returned["v_obs"] == 0.0
+    assert returned["v_star"] >= 0.0
+
+
+def test_persistent_stockout_with_sales_uses_audited_lower_bound() -> None:
+    config = AppConfig.load(PROJECT_ROOT).restoration
+    rows: list[dict[str, object]] = []
+    for sku_code in ("GOOD", "BAD"):
+        for index in range(28):
+            day = date(2025, 1, 1) + timedelta(days=index)
+            exposed = sku_code == "GOOD"
+            sale = 1.0 if exposed or index < 3 else 0.0
+            rows.append(
+                {
+                    "sku_code": sku_code,
+                    "cate_level4_code": "TOY",
+                    "store_code": "S1",
+                    "store_business_state": "NORMAL",
+                    "store_level": "A",
+                    "store_tier": "NORMAL|A",
+                    "lifecycle_week": index // 7 + 1,
+                    "week_start": date(2025, 1, 1)
+                    + timedelta(days=(index // 7) * 7),
+                    "week_end": date(2025, 1, 7)
+                    + timedelta(days=(index // 7) * 7),
+                    "complete_week": True,
+                    "business_day": day,
+                    "e_open": 1.0,
+                    "e_stock": 1.0 if exposed else 0.0,
+                    "e_display": 1.0,
+                    "e_total": 1.0 if exposed else 0.0,
+                    "anomaly_confidence": 1.0,
+                    "reported_sale_qty": sale,
+                    "clean_sale_qty": sale,
+                    "abnormal_sale_qty": 0.0,
+                    "abnormal_order_count": 0,
+                    "price_log_ratio": 0.0,
+                    "promotion_price_proxy": False,
+                }
+            )
+    panel = pd.DataFrame(rows)
+
+    weekly, model_report = fit_and_restore_weekly(
+        panel,
+        config=config,
+        fit_skus={"GOOD", "BAD"},
+        training_weights={"GOOD": 1.0, "BAD": 1.0},
+    )
+    bad = weekly.loc[weekly["sku_code"] == "BAD"]
+
+    assert model_report["fit_sku_count"] == 1
+    assert bad["stock_grain_unreliable"].all()
+    assert not bad["model_fit_eligible"].any()
+    assert (bad["restored_lost_sales"] == 0).all()
+    assert (bad["v_star"] == bad["observed_lower_bound_velocity"]).all()
+    assert (
+        bad["restoration_status"]
+        == "observed_lower_bound_stock_grain_unreliable"
+    ).all()
+
+
+def test_nonconverged_huber_scopes_use_explicit_fallback() -> None:
+    config = replace(
+        AppConfig.load(PROJECT_ROOT).restoration,
+        huber_max_iter=1,
+        huber_convergence_tolerance=1e-12,
+    )
+    fit_rows = pd.DataFrame(
+        [
+            {
+                "sku_code": f"SKU{index % 3}",
+                "store_code": f"S{index % 5}",
+                "cate_level4_code": "TOY",
+                "v_observed_raw": float((index % 7) + 1),
+                "mean_price_log_ratio": float((index % 4) - 2) / 10.0,
+                "fit_weight": 1.0 + index / 100.0,
+            }
+            for index in range(40)
+        ]
+    )
+
+    fitted = fit_restoration_model(fit_rows, config=config)
+
+    assert fitted.report["status"] == "warning"
+    assert "__GLOBAL__" in fitted.report["nonconverged_scopes"]
+    assert "TOY" in fitted.report["nonconverged_scopes"]
+    assert fitted.report["fallback_scopes"]["TOY"] == "__GLOBAL__"
+    assert "TOY" not in fitted.models
+    assert fitted.report["category_models"]["TOY"]["used_for_prediction"] is False
+
+
 def test_quality_report_treats_nullable_stock_state_as_unknown_not_stockout() -> None:
     daily = pd.DataFrame(
         {
@@ -192,6 +433,17 @@ def test_quality_report_treats_nullable_stock_state_as_unknown_not_stockout() ->
 
     assert report["exposure"]["unknown_exposure_days"] == 1
     assert report["exposure"]["stockout_days"] == 0
+
+    compact_report = build_restoration_quality_report_from_summary(
+        summarize_daily_quality_inputs(daily),
+        weekly,
+        requested_fit_skus={"SKU1"},
+        model_report={"fit_sku_count": 0},
+    )
+    assert compact_report["flag_normalization"] == report["flag_normalization"]
+    assert compact_report["exposure"] == report["exposure"]
+    assert compact_report["model_gate"] == report["model_gate"]
+    assert compact_report["signed_sales"] == report["signed_sales"]
 
 
 def test_m2_restores_stockout_and_nondisplay_with_auditable_shrinkage(
@@ -242,6 +494,12 @@ def test_m2_restores_stockout_and_nondisplay_with_auditable_shrinkage(
                 "open_date": "2020-01-01",
                 "close_date": None,
                 "sts_state": "1",
+                "city_level": "T1",
+                "city_name": "Shanghai",
+                "secbiz_area_name": "CBD",
+                "area_class1_name": "MALL",
+                "operate_size": 120.0,
+                "meter_sum": 80.0,
             }
         ]
     )
@@ -265,7 +523,9 @@ def test_m2_restores_stockout_and_nondisplay_with_auditable_shrinkage(
 
     week = result.weekly.iloc[0]
     assert result.stats.abnormal_order_lines == 1
-    assert week["clean_sales_qty"] == 25
+    # V3.2 retains real P99.5 bursts in the business total and robustly
+    # downweights them for model fitting instead of deleting them.
+    assert week["clean_sales_qty"] == 125
     assert week["abnormal_sales_qty"] == 100
     assert week["observed_exposure_days"] == 5
     assert week["known_censored_days"] == 2
@@ -273,11 +533,26 @@ def test_m2_restores_stockout_and_nondisplay_with_auditable_shrinkage(
     assert week["nondisplay_days"] == 1
     assert week["restored_lost_sales"] > 0
     assert week["restored_natural_sales"] > 25
-    assert week["n_eff"] == pytest.approx(4.2)
-    assert week["reliability_r"] == pytest.approx(4.2 / 11.2)
+    assert 4.0 < week["n_eff"] < 5.0
+    assert week["reliability_r"] == pytest.approx(
+        week["n_eff"] / (week["n_eff"] + config.shrinkage_k_exposure_days)
+    )
     assert week["v_star"] >= 0
     assert week["period_factor_h"] == 1
     assert result.tier_weekly.iloc[0]["store_tier"] == "NORMAL|A"
+    global_model = result.model_report["category_models"]["__GLOBAL__"]
+    assert set(global_model["numeric_covariates"]) == {
+        "operate_size",
+        "meter_sum",
+        "lifecycle_week",
+    }
+    assert set(global_model["categorical_covariates"]) == {
+        "store_tier",
+        "city_level",
+        "city_name",
+        "secbiz_area_name",
+        "area_class1_name",
+    }
     paths = write_restoration_artifacts(
         output_dir=tmp_path / "round4", result=result, report={"status": "ok"}
     )

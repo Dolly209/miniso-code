@@ -1,0 +1,13 @@
+mapping_version,catalog_as_of,standard_ip_code,standard_ip_name,social_ip_name,match_method,shared_social_bucket,enabled,source_note
+social-ip-alias-v1,2026-04-01,三丽鸥::Hello Kitty,Hello Kitty,三丽鸥_Hello Kitty,reviewed_exact_alias,0,1,标准IP名称与社媒目录名称的前缀差异
+social-ip-alias-v1,2026-04-01,三丽鸥::美乐蒂,美乐蒂,三丽鸥_美乐蒂,reviewed_exact_alias,0,1,标准IP名称与社媒目录名称的前缀差异
+social-ip-alias-v1,2026-04-01,三丽鸥::酷洛米,酷洛米,三丽鸥_酷洛米,reviewed_exact_alias,0,1,标准IP名称与社媒目录名称的前缀差异
+social-ip-alias-v1,2026-04-01,三丽鸥::大耳狗,大耳狗,三丽鸥_大耳狗,reviewed_exact_alias,0,1,标准IP名称与社媒目录名称的前缀差异
+social-ip-alias-v1,2026-04-01,三丽鸥::布丁狗,布丁狗,三丽鸥_布丁狗,reviewed_exact_alias,0,1,标准IP名称与社媒目录名称的前缀差异
+social-ip-alias-v1,2026-04-01,三丽鸥::人鱼汉顿,人鱼汉顿,三丽鸥_人鱼汉顿,reviewed_exact_alias,0,1,标准IP名称与社媒目录名称的前缀差异
+social-ip-alias-v1,2026-04-01,YOYO,YOYO,YOYO右右酱,reviewed_exact_alias,0,1,标准IP简称与社媒目录全称的差异
+social-ip-alias-v1,2026-04-01,AngryAimee,AngryAimee,气宝 AngryAimee,shared_social_bucket,1,1,社媒源将气宝与AngryAimee合并统计
+social-ip-alias-v1,2026-04-01,气宝,气宝,气宝 AngryAimee,shared_social_bucket,1,1,社媒源将气宝与AngryAimee合并统计
+social-ip-alias-v1,2026-04-01,Q宝,Q宝,Q.Kid / Q宝,reviewed_exact_alias,0,1,标准IP简称与社媒目录中英文全称的差异
+social-ip-alias-v1,2026-04-01,ZIYULI,ZIYULI,ZIYULI 又梨,reviewed_exact_alias,0,1,标准IP英文名与社媒目录中英文全称的差异
+social-ip-alias-v1,2026-04-01,丘比,丘比,丘比 KEWPIE,reviewed_exact_alias,0,1,标准IP中文名与社媒目录中英文全称的差异

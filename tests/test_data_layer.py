@@ -13,7 +13,9 @@ from config.settings import TableSpec
 from data.decision_adapter import (
     DecisionDataAdapter,
     PLACEMENT_LAUNCH_COLUMNS,
+    PRODUCT_COLUMNS as DECISION_PRODUCT_COLUMNS,
     ProductDomain,
+    SOCIAL_MEDIA_COLUMNS,
     SOURCES,
 )
 from data.domestic import (
@@ -210,6 +212,166 @@ def test_restoration_product_snapshot_falls_back_per_sku_before_cutoff(
     assert "product_snapshot_fallback_complete" in events
 
 
+def test_decision_product_snapshot_falls_back_to_latest_row_per_requested_sku(
+    tmp_path: Path,
+) -> None:
+    table_name = SOURCES["product"]
+    spec = TableSpec(
+        table_name=table_name,
+        partition_column="ds",
+        required_fields=DECISION_PRODUCT_COLUMNS,
+        read_mode="latest_snapshot",
+        business_date_column="ds",
+        grain_columns=("ds", "sku_code", "ip_code"),
+        sku_column="sku_code",
+    )
+
+    def product_row(
+        sku_code: str,
+        *,
+        category: str,
+        price: float,
+        ip_code: str,
+    ) -> dict[str, object]:
+        row = {
+            column: None
+            for column in DECISION_PRODUCT_COLUMNS
+            if column != "ds"
+        }
+        row.update(
+            {
+                "sku_code": sku_code,
+                "sku_name": f"{sku_code} 盲盒",
+                "ip_code": ip_code,
+                "ip_name": ip_code,
+                "cate_level4_code": category,
+                "manage_cate_name": "盲盒",
+                "retail_price": price,
+                "pkg_unit": 1,
+            }
+        )
+        return row
+
+    _write_partition(
+        tmp_path,
+        table_name,
+        "2025-01-01",
+        [
+            product_row("OLD", category="C1", price=10.0, ip_code="IP-A"),
+            product_row("OLD", category="C1", price=10.0, ip_code="IP-B"),
+            product_row("CURRENT", category="C2", price=20.0, ip_code="IP-C"),
+        ],
+    )
+    _write_partition(
+        tmp_path,
+        table_name,
+        "2025-01-02",
+        [product_row("CURRENT", category="C2", price=20.0, ip_code="IP-C")],
+    )
+    _write_partition(
+        tmp_path,
+        table_name,
+        "2025-01-03",
+        [product_row("OLD", category="FUTURE", price=99.0, ip_code="IP-X")],
+    )
+    adapter = DecisionDataAdapter(
+        ParquetDataRepository(data_root=tmp_path, table_specs=[spec])
+    )
+    events: list[str] = []
+
+    domain = adapter.products(
+        datetime.fromisoformat("2025-01-02T23:59:59+08:00"),
+        sku_codes=["OLD", "CURRENT"],
+        progress=lambda event, _details: events.append(event),
+    )
+
+    products = domain.products.set_index("sku_code")
+    audit = domain.snapshot_audit.set_index("sku_code")
+    assert set(products.index) == {"OLD", "CURRENT"}
+    assert products.loc["OLD", "cate_level4_code"] == "C1"
+    assert products.loc["OLD", "retail_price"] == 10.0
+    assert set(
+        domain.ip_membership.loc[
+            domain.ip_membership["sku_code"].eq("OLD"), "ip_code"
+        ]
+    ) == {"IP-A", "IP-B"}
+    assert audit.loc["OLD", "source_product_partition"] == "2025-01-01"
+    assert audit.loc["OLD", "product_snapshot_status"] == "historical_fallback"
+    assert audit.loc["CURRENT", "product_snapshot_status"] == "latest_partition"
+    assert "product_snapshot_fallback_complete" in events
+
+
+def test_decision_product_snapshot_reports_all_missing_requested_skus(
+    tmp_path: Path,
+) -> None:
+    table_name = SOURCES["product"]
+    spec = TableSpec(
+        table_name=table_name,
+        partition_column="ds",
+        required_fields=DECISION_PRODUCT_COLUMNS,
+        read_mode="latest_snapshot",
+        business_date_column="ds",
+        grain_columns=("ds", "sku_code", "ip_code"),
+        sku_column="sku_code",
+    )
+    row = {
+        column: None for column in DECISION_PRODUCT_COLUMNS if column != "ds"
+    }
+    row.update({"sku_code": "CURRENT", "ip_code": "IP-C"})
+    _write_partition(tmp_path, table_name, "2025-01-02", [row])
+    adapter = DecisionDataAdapter(
+        ParquetDataRepository(data_root=tmp_path, table_specs=[spec])
+    )
+
+    with pytest.raises(DataContractViolation, match="MISSING-A.*MISSING-B"):
+        adapter.products(
+            datetime.fromisoformat("2025-01-02T23:59:59+08:00"),
+            sku_codes=["MISSING-B", "MISSING-A"],
+        )
+
+
+def test_decision_product_snapshot_can_disable_historical_fallback(
+    tmp_path: Path,
+) -> None:
+    table_name = SOURCES["product"]
+    spec = TableSpec(
+        table_name=table_name,
+        partition_column="ds",
+        required_fields=DECISION_PRODUCT_COLUMNS,
+        read_mode="latest_snapshot",
+        business_date_column="ds",
+        grain_columns=("ds", "sku_code", "ip_code"),
+        sku_column="sku_code",
+    )
+
+    def row(sku_code: str) -> dict[str, object]:
+        value = {
+            column: None for column in DECISION_PRODUCT_COLUMNS if column != "ds"
+        }
+        value.update({"sku_code": sku_code, "ip_code": "IP-A"})
+        return value
+
+    _write_partition(tmp_path, table_name, "2025-01-01", [row("OLD")])
+    _write_partition(tmp_path, table_name, "2025-01-02", [row("CURRENT")])
+    adapter = DecisionDataAdapter(
+        ParquetDataRepository(data_root=tmp_path, table_specs=[spec])
+    )
+
+    domain = adapter.products(
+        datetime.fromisoformat("2025-01-02T23:59:59+08:00"),
+        sku_codes=["OLD", "CURRENT"],
+        allow_missing=True,
+        fallback_to_historical=False,
+    )
+
+    assert set(domain.products["sku_code"]) == {"CURRENT"}
+    audit = domain.snapshot_audit.set_index("sku_code")
+    assert audit.loc["OLD", "product_snapshot_status"] == (
+        "missing_in_latest_partition"
+    )
+    assert audit.loc["CURRENT", "source_product_partition"] == "2025-01-02"
+
+
 def test_historical_source_refuses_implicit_unbounded_fetch(tmp_path: Path) -> None:
     spec = _sales_spec()
     _write_partition(tmp_path, spec.table_name, "2025-01-01", [_sales_row(order_id="A", qty=1)])
@@ -382,6 +544,10 @@ def test_placement_adapter_builds_28_day_arrival_universe(tmp_path: Path) -> Non
                     "store_code": "S1",
                     "store_tier": "1|S",
                     "v_neutral": 2.0,
+                    "lifecycle_week": 1,
+                    "ending_available_stock_qty": 10.0,
+                    "normal_sales_for_pressure": 14.0,
+                    "normal_sales_days_for_pressure": 7.0,
                     "stockout_days": 1,
                     "source_day_rows": 7,
                 }
@@ -395,7 +561,83 @@ def test_placement_adapter_builds_28_day_arrival_universe(tmp_path: Path) -> Non
     assert evidence.loc["S1", "arrived_in_launch_window"] == 1
     assert evidence.loc["S2", "arrived_in_launch_window"] == 0
     assert evidence.loc["S1", "launch_window_end"] == "2025-01-28"
-    assert evidence.loc["S1", "stock_pressure"] == pytest.approx(1 / 7)
+    assert evidence.loc["S1", "recent_normal_daily_sales"] == pytest.approx(2.0)
+    assert evidence.loc["S1", "stock_pressure"] == pytest.approx(5.0)
+    assert evidence.loc["S1", "stock_pressure_unit"] == "days_of_supply"
+    assert evidence.loc["S2", "stock_pressure_status"] == (
+        "missing_store_launch_window_restoration_inputs"
+    )
+
+
+def test_placement_launch_source_audit_distinguishes_partition_gap(
+    tmp_path: Path,
+) -> None:
+    table_name = SOURCES["placement"]
+    spec = TableSpec(
+        table_name=table_name,
+        partition_column="ds",
+        required_fields=PLACEMENT_LAUNCH_COLUMNS,
+        read_mode="partition_range",
+        business_date_column="ds",
+        grain_columns=("ds", "sku_code", "store_code"),
+        sku_column="sku_code",
+    )
+    _write_partition(
+        tmp_path,
+        table_name,
+        "2025-01-02",
+        [
+            {
+                "sku_code": "RECENT",
+                "store_code": "S1",
+                "first_store_arrival_time": "2025-01-02 10:00:00",
+            }
+        ],
+    )
+    adapter = DecisionDataAdapter(
+        ParquetDataRepository(data_root=tmp_path, table_specs=[spec])
+    )
+    domain = adapter.audit_placement_launch_source(
+        datetime.fromisoformat("2025-01-30T23:59:59+08:00"),
+        candidate_products=pd.DataFrame(
+            [
+                {
+                    "sku_code": "OLD",
+                    "first_sale_date": "2024-09-21",
+                    "release_dt": "2023-12-20",
+                },
+                {
+                    "sku_code": "RECENT",
+                    "first_sale_date": "2025-01-01",
+                    "release_dt": "2024-12-20",
+                },
+            ]
+        ),
+        launch_window_days=28,
+        candidate_cohort=pd.DataFrame(
+            {
+                "sku_code": ["OLD", "RECENT"],
+                "first_actual_sale_date": ["2025-01-01", "2025-01-01"],
+            }
+        ),
+    )
+
+    audit = domain.summary.set_index("sku_code")
+    assert audit.loc["OLD", "audit_status"] == (
+        "no_source_partitions_in_launch_window"
+    )
+    assert audit.loc["OLD", "source_partition_count_in_window"] == 0
+    assert audit.loc["OLD", "source_rows"] == 0
+    assert audit.loc["OLD", "cohort_origin_offset_days"] == 102
+    assert audit.loc["OLD", "product_lifecycle_week_at_cohort_start"] == 15
+    assert audit.loc["OLD", "launch_date"] == "2024-09-21"
+    assert audit.loc["OLD", "cohort_first_actual_sale_date"] == "2025-01-01"
+    assert audit.loc["OLD", "lifecycle_origin_status"] == "cohort_starts_after_product_launch"
+    assert audit.loc["RECENT", "audit_status"] == (
+        "usable_first_arrival_evidence"
+    )
+    assert audit.loc["RECENT", "arrived_in_launch_window_store_count"] == 1
+    assert audit.loc["RECENT", "lifecycle_origin_status"] == "aligned"
 
 
 def test_factor_features_use_resolved_ip_and_preserve_unknown_as_missing() -> None:
@@ -482,3 +724,48 @@ def test_factor_features_use_resolved_ip_and_preserve_unknown_as_missing() -> No
     assert pd.isna(by_sku.loc["UNKNOWN", "lifecycle_persistence"])
     assert by_sku.loc["UNKNOWN", "ip_breadth_status"] == "missing_standard_ip"
     assert by_sku.loc["UNKNOWN", "multi_supplier_status"] == "missing_supplier_flag"
+
+
+def test_social_interaction_rate_can_exceed_percent_scale(tmp_path: Path) -> None:
+    table_name = SOURCES["social"]
+    spec = TableSpec(
+        table_name=table_name,
+        partition_column="ds",
+        required_fields=SOCIAL_MEDIA_COLUMNS,
+        read_mode="partition_range",
+        business_date_column="date",
+        grain_columns=("date", "ip_name", "platform_code"),
+    )
+    row = {
+        column: 0
+        for column in SOCIAL_MEDIA_COLUMNS
+        if column
+        not in {
+            "ds", "date", "ip_name", "platform_code", "platform_name",
+            "create_time", "update_time", "data_load_time",
+        }
+    }
+    row.update(
+        {
+            "date": "2025-01-02",
+            "ip_name": "初音未来",
+            "platform_code": "weibo",
+            "platform_name": "微博",
+            "interaction_rate": 505.38461538,
+            "create_time": "2025-01-03 05:00:00",
+            "update_time": "2025-01-03 05:00:00",
+            "data_load_time": "2025-01-03 10:00:00",
+        }
+    )
+    _write_partition(tmp_path, table_name, "2025-01-02", [row])
+    adapter = DecisionDataAdapter(
+        ParquetDataRepository(data_root=tmp_path, table_specs=[spec])
+    )
+
+    result = adapter.external_media_history(
+        datetime.fromisoformat("2025-01-02T23:59:59+08:00"),
+        start_date=date(2025, 1, 2),
+        end_date=date(2025, 1, 2),
+    )
+
+    assert result.history.loc[0, "interaction_rate"] == pytest.approx(505.38461538)

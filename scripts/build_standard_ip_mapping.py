@@ -101,16 +101,18 @@ def main() -> int:
         adapter = DecisionDataAdapter.from_project(
             project_root=PROJECT_ROOT, data_root=args.data_root, config=config
         )
-        # Read the cutoff product snapshot once, then restrict it to the Round 3
-        # cohort. Passing thousands of SKU filters into the adapter would scan
-        # the same partition once per SKU.
-        product_domain = adapter.products(args.decision_cutoff_time)
-        products = product_domain.products.loc[
-            product_domain.products["sku_code"].astype(str).isin(selected_skus)
-        ].copy()
-        raw_ip_membership = product_domain.ip_membership.loc[
-            product_domain.ip_membership["sku_code"].astype(str).isin(selected_skus)
-        ].copy()
+        product_domain = adapter.products(
+            args.decision_cutoff_time,
+            sku_codes=sorted(selected_skus),
+            allow_missing=True,
+            progress=lambda event, details: logger.info(
+                "product_progress event=%s %s",
+                event,
+                " ".join(f"{key}={value}" for key, value in details.items()),
+            ),
+        )
+        products = product_domain.products.copy()
+        raw_ip_membership = product_domain.ip_membership.copy()
         result = build_server_ip_mapping(
             products=products,
             raw_ip_membership=raw_ip_membership,
@@ -133,6 +135,12 @@ def main() -> int:
         cohort_context = cohort[cohort_context_columns].copy()
         audit = cohort_context.merge(
             result.audit,
+            on="sku_code",
+            how="left",
+            validate="one_to_one",
+        )
+        audit = audit.merge(
+            product_domain.snapshot_audit,
             on="sku_code",
             how="left",
             validate="one_to_one",
@@ -222,6 +230,13 @@ def main() -> int:
             "generated_at_utc": datetime.now(timezone.utc).isoformat(),
             "decision_cutoff_time": args.decision_cutoff_time.isoformat(),
             "source_product_partition": product_domain.source_partition,
+            "product_snapshot_policy": "latest_per_cohort_sku_on_or_before_cutoff",
+            "product_snapshot_status_counts": {
+                str(key): int(value)
+                for key, value in product_domain.snapshot_audit[
+                    "product_snapshot_status"
+                ].value_counts().items()
+            },
             "cohort_file": str(args.cohort_file),
             "cohort_skus": int(len(cohort)),
             "mapping_file": str(args.mapping_file),

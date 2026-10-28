@@ -44,13 +44,11 @@ def read_historical_snapshots(
         cutoff_time=cutoff_time,
         columns=(
             "ds", "sku_code", "sku_name", "first_sale_date",
-            "cate_level3_name", "cate_level4_name",
+            "cate_level3_name", "cate_level4_name", "pkg_unit",
         ),
     )
-    pack, pack_partition = read_latest_nonempty_snapshot(
-        repository=repository,
-        source_name=SOURCES["pack"],
-        cutoff_time=cutoff_time,
-        columns=("ds", "sku_code", "pkg_unit"),
-    )
-    return product, product_partition, pack, pack_partition
+    # The delivered packaging table repeats goods_unit/pkg_unit/box_unit from
+    # the product master.  Keep the historical-reproduction API stable while
+    # deriving its pack snapshot from the same authoritative product snapshot.
+    pack = product[["ds", "sku_code", "pkg_unit"]].copy()
+    return product, product_partition, pack, product_partition

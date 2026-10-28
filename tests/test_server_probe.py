@@ -58,7 +58,7 @@ def test_probe_is_read_only_and_writes_all_reports(
     assert digest_tree(FIXTURE_ROOT) == before
 
     tables = json.loads(paths["tables"].read_text(encoding="utf-8"))["tables"]
-    assert len(tables) == 10
+    assert len(tables) == 11
     goods = next(
         item for item in tables if item["table_name"] == "scm.dim_goods_info_ip_forecast"
     )

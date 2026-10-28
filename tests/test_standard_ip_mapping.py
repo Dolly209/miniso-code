@@ -437,3 +437,31 @@ def test_resolved_snapshot_rejects_stale_version_cutoff_and_sku_universe() -> No
         validate_resolved_standard_ip_snapshot(
             incomplete_mapping, cohort=cohort, report=report, decision_cutoff_time=cutoff
         )
+
+
+def test_historical_replay_accepts_only_a_subset_of_fixed_mapping_snapshot() -> None:
+    mapping, cohort, report = _resolved_snapshot_fixture()
+    historical_cutoff = datetime.fromisoformat("2025-03-01T23:59:59+08:00")
+    reference_snapshot = datetime.fromisoformat("2026-09-30T23:59:59+08:00")
+    target_subset = cohort.loc[cohort["sku_code"].eq("A")].copy()
+
+    version = validate_resolved_standard_ip_snapshot(
+        mapping,
+        cohort=target_subset,
+        report=report,
+        decision_cutoff_time=historical_cutoff,
+        reference_snapshot_time=reference_snapshot,
+        allow_cohort_subset=True,
+    )
+
+    assert version == "v3.2-2026-09-30-test"
+
+    with pytest.raises(DataContractViolation, match="SKU universe"):
+        validate_resolved_standard_ip_snapshot(
+            mapping,
+            cohort=target_subset,
+            report=report,
+            decision_cutoff_time=historical_cutoff,
+            reference_snapshot_time=reference_snapshot,
+            allow_cohort_subset=False,
+        )

@@ -91,11 +91,28 @@ def _time_weights(dates: pd.Series, half_life: int | str) -> np.ndarray:
 
 
 def _sample_weights(frame: pd.DataFrame, half_life: int | str) -> np.ndarray:
-    labels = frame.groupby("sku_code")["label"].first().to_dict()
-    sku_weight = {row.sku_code: row.weight for row in long_tail_weights(labels)}
+    band_source_column = (
+        "sales_26w_qty" if "sales_26w_qty" in frame else "label"
+    )
+    band_values = frame.groupby("sku_code")[band_source_column].first().to_dict()
+    sku_weight = {
+        row.sku_code: row.weight for row in long_tail_weights(band_values)
+    }
+    # V3.2 divides a SKU's weight only across *reorder* decision nodes.  The
+    # user-confirmed M5/M4/M3 first-order checkpoints are three independent
+    # forecasts of the complete first-order demand and must not be treated as
+    # fractional reorder nodes.
+    independent_checkpoints = (
+        "prediction_checkpoint_key" in frame
+        and frame["prediction_checkpoint_key"].notna().all()
+    )
     node_count = frame.groupby("sku_code").size().to_dict()
     long_tail = np.array(
-        [sku_weight[str(sku)] / node_count[str(sku)] for sku in frame["sku_code"].astype(str)],
+        [
+            sku_weight[str(sku)]
+            / (1 if independent_checkpoints else node_count[str(sku)])
+            for sku in frame["sku_code"].astype(str)
+        ],
         dtype=float,
     )
     combined = long_tail * _time_weights(frame["first_actual_sale_date"], half_life)
@@ -107,12 +124,22 @@ def _evaluation_weights(
     full_train: pd.DataFrame,
     half_life: int | str,
 ) -> np.ndarray:
-    labels = full_train.groupby("sku_code")["label"].first().to_dict()
-    sku_weight = {row.sku_code: row.weight for row in long_tail_weights(labels)}
+    band_source_column = (
+        "sales_26w_qty" if "sales_26w_qty" in full_train else "label"
+    )
+    band_values = full_train.groupby("sku_code")[band_source_column].first().to_dict()
+    sku_weight = {
+        row.sku_code: row.weight for row in long_tail_weights(band_values)
+    }
+    independent_checkpoints = (
+        "prediction_checkpoint_key" in evaluation
+        and evaluation["prediction_checkpoint_key"].notna().all()
+    )
     node_count = evaluation.groupby("sku_code").size().to_dict()
     long_tail = np.array(
         [
-            sku_weight[str(sku)] / node_count[str(sku)]
+            sku_weight[str(sku)]
+            / (1 if independent_checkpoints else node_count[str(sku)])
             for sku in evaluation["sku_code"].astype(str)
         ],
         dtype=float,
@@ -204,6 +231,25 @@ def _prepare_training_frame(frame: pd.DataFrame) -> pd.DataFrame:
     result["label"] = pd.to_numeric(result["label"], errors="raise")
     if (result["label"] < 0).any():
         raise ValueError("modeling_dataset contains negative labels")
+    if "prediction_checkpoint_key" in result:
+        keys = result["prediction_checkpoint_key"].astype(str).str.strip()
+        if keys.eq("").any() or keys.duplicated().any():
+            raise ValueError(
+                "prelaunch modeling_dataset must be unique by prediction_checkpoint_key"
+            )
+        consistency = result.groupby("sku_code").agg(
+            first_sale_dates=("first_actual_sale_date", "nunique"),
+            split_values=("split", "nunique"),
+            label_values=("label", "nunique"),
+        )
+        if (
+            consistency["first_sale_dates"].gt(1).any()
+            or consistency["split_values"].gt(1).any()
+            or consistency["label_values"].gt(1).any()
+        ):
+            raise ValueError(
+                "all prelaunch checkpoints for one SKU must share first-sale date, split, and label"
+            )
     return result
 
 
@@ -254,7 +300,29 @@ def rolling_oof_train(
                     validation_frame["ridge"] = float(ridge)
                     validation_frame["l1_ratio"] = float(l1_ratio)
                     validation_frame["half_life_weeks"] = str(half_life)
-                    parts.append(validation_frame[["sku_code", "first_actual_sale_date", "label", "prediction", "fold", "ridge", "l1_ratio", "half_life_weeks"]])
+                    identity_columns = ["sku_code"]
+                    for optional in (
+                        "prediction_checkpoint_key",
+                        "prediction_checkpoint",
+                        "lead_months",
+                        "decision_cutoff_time",
+                    ):
+                        if optional in validation_frame:
+                            identity_columns.append(optional)
+                    parts.append(
+                        validation_frame[
+                            [
+                                *identity_columns,
+                                "first_actual_sale_date",
+                                "label",
+                                "prediction",
+                                "fold",
+                                "ridge",
+                                "l1_ratio",
+                                "half_life_weeks",
+                            ]
+                        ]
+                    )
                     if float(ridge) == float(ridge_grid[0]) and float(l1_ratio) == 0.0 and str(half_life) == str(half_life_grid[0]):
                         for name, coefficient in zip(feature_columns, model.coefficients):
                             coefficient_signs[name].append(float(np.sign(coefficient)))
@@ -300,6 +368,16 @@ def rolling_oof_train(
         "test_rows_consumed": 0,
         "oof_rows": len(oof),
         "oof_policy": "B2..Bk predicted only by earlier blocks",
+        "sample_grain": (
+            "sku_x_independent_prelaunch_checkpoint"
+            if "prediction_checkpoint_key" in train
+            else "sku_or_reorder_node"
+        ),
+        "checkpoint_weight_policy": (
+            "no_w_i_div_m_i; M5/M4/M3 each predicts complete first-order demand"
+            if "prediction_checkpoint_key" in train
+            else "V3.2 reorder nodes divide SKU weight by valid node count"
+        ),
         "selected_ridge": float(best["ridge"]),
         "selected_l1_ratio": float(best["l1_ratio"]),
         "selected_half_life_weeks": str(best["half_life_weeks"]),
@@ -338,18 +416,57 @@ def replay_test(
     metrics = weighted_metrics(test["label"].to_numpy(), test["prediction"].to_numpy())
     grade_metrics: dict[str, Any] = {}
     if grade_thresholds is not None:
-        def grade(value: float) -> str:
-            if value <= float(grade_thresholds["C_max"]):
+        nested_thresholds = {
+            "own_ip",
+            "licensed_ip",
+        }.issubset(grade_thresholds)
+        copyright_candidates = [
+            column
+            for column in test.columns
+            if column == "copyright_category"
+            or column.endswith("__copyright_category")
+        ]
+        if nested_thresholds:
+            copyright = (
+                test[copyright_candidates[0]].fillna("").astype(str).str.strip()
+                if copyright_candidates
+                else pd.Series("", index=test.index)
+            )
+            test["grade_threshold_type"] = np.where(
+                copyright.isin({"", "自有IP", "自有", "OWN"}),
+                "own_ip",
+                "licensed_ip",
+            )
+        else:
+            test["grade_threshold_type"] = "legacy_flat"
+
+        def grade(value: float, threshold_type: str) -> str:
+            thresholds = (
+                grade_thresholds[threshold_type]
+                if nested_thresholds
+                else grade_thresholds
+            )
+            if value <= float(thresholds["C_max"]):
                 return "C"
-            if value < float(grade_thresholds["B_max"]):
+            if value < float(thresholds["B_max"]):
                 return "B"
-            if value < float(grade_thresholds["A_max"]):
+            if value < float(thresholds["A_max"]):
                 return "A"
             return "S"
 
         order = {"C": 0, "B": 1, "A": 2, "S": 3}
-        test["actual_grade"] = test["label"].map(grade)
-        test["predicted_grade"] = test["prediction"].map(grade)
+        test["actual_grade"] = [
+            grade(value, threshold_type)
+            for value, threshold_type in zip(
+                test["label"], test["grade_threshold_type"]
+            )
+        ]
+        test["predicted_grade"] = [
+            grade(value, threshold_type)
+            for value, threshold_type in zip(
+                test["prediction"], test["grade_threshold_type"]
+            )
+        ]
         distance = np.array(
             [
                 abs(order[actual] - order[predicted])

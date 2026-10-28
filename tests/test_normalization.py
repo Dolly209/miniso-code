@@ -27,8 +27,8 @@ def test_flag_normalization_handles_full_width_and_business_aliases() -> None:
 
 
 def test_identifier_normalization_strips_without_changing_case() -> None:
-    values = pd.Series([" 2028156310109 ", " Ｚ088 "])
+    values = pd.Series([" TEST-SKU-001 ", " Ｚ088 "])
 
     normalized = normalize_identifier(values, field_name="sku_code")
 
-    assert normalized.tolist() == ["2028156310109", "Z088"]
+    assert normalized.tolist() == ["TEST-SKU-001", "Z088"]

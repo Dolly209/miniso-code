@@ -167,6 +167,27 @@
       "key_columns": ["ds", "stat_month", "sku_code"],
       "sku_column": "sku_code",
       "date_columns": ["ds", "stat_month"]
+    },
+    {
+      "table_name": "ods.ods_miniso_cn_qianchuan_ip_platform_note",
+      "partition_column": "ds",
+      "read_mode": "partition_range",
+      "business_date_column": "date",
+      "grain_columns": ["date", "ip_name", "platform_code"],
+      "required_fields": [
+        "ds", "date", "ip_name", "platform_code", "platform_name", "tracked_post_count",
+        "post_count", "unique_author_count", "video_post_count", "pic_post_count",
+        "like_count", "comment_count", "share_count", "collect_count", "view_count",
+        "interaction_count", "max_post_interaction_count", "avg_post_interaction_count",
+        "interaction_rate", "view_coverage_rate", "text_coverage_rate",
+        "ordinary_author_count", "koc_author_count", "kol_author_count",
+        "max_author_follower_count", "avg_author_follower_count",
+        "positive_post_count", "negative_post_count", "positive_post_share",
+        "negative_post_share", "create_time", "update_time", "data_load_time"
+      ],
+      "key_columns": ["date", "ip_name", "platform_code"],
+      "ip_column": "ip_name",
+      "date_columns": ["ds", "date", "create_time", "update_time", "data_load_time"]
     }
   ]
 }

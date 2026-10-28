@@ -495,6 +495,8 @@ def validate_resolved_standard_ip_snapshot(
     cohort: pd.DataFrame,
     report: Mapping[str, Any],
     decision_cutoff_time: datetime,
+    reference_snapshot_time: datetime | None = None,
+    allow_cohort_subset: bool = False,
 ) -> str:
     """Validate a materialized cohort SKU-to-IP snapshot before downstream use.
 
@@ -502,6 +504,12 @@ def validate_resolved_standard_ip_snapshot(
     text inference. Rebuilding is an explicit upstream action performed by
     ``build_standard_ip_mapping.py`` when the cohort, cutoff, reference, alias
     rules, or mapping implementation changes.
+
+    Historical pre-launch replay deliberately separates the fact cutoff from
+    the fixed product-master/reference snapshot confirmed by the business.  In
+    that mode ``reference_snapshot_time`` is the fixed snapshot time and the
+    replay cohort may be a strict subset of the mapping universe.  Missing
+    cohort SKUs still fail; only unrelated extra mapping rows are allowed.
     """
 
     require_columns(
@@ -545,7 +553,7 @@ def validate_resolved_standard_ip_snapshot(
     snapshot_skus = set(resolved["sku_code"])
     missing = sorted(cohort_skus - snapshot_skus)
     extra = sorted(snapshot_skus - cohort_skus)
-    if missing or extra:
+    if missing or (extra and not allow_cohort_subset):
         raise DataContractViolation(
             "resolved standard IP snapshot SKU universe does not match cohort; "
             f"missing_count={len(missing)} missing_examples={missing[:5]} "
@@ -576,15 +584,24 @@ def validate_resolved_standard_ip_snapshot(
         raise DataContractViolation(
             "standard IP snapshot report cutoff must include a UTC offset"
         )
-    if report_cutoff.astimezone(timezone.utc) != decision_cutoff_time.astimezone(
+    expected_snapshot_time = reference_snapshot_time or decision_cutoff_time
+    if (
+        expected_snapshot_time.tzinfo is None
+        or expected_snapshot_time.utcoffset() is None
+    ):
+        raise DataContractViolation(
+            "standard IP reference snapshot time must include a UTC offset"
+        )
+    if report_cutoff.astimezone(timezone.utc) != expected_snapshot_time.astimezone(
         timezone.utc
     ):
         raise DataContractViolation(
-            "standard IP snapshot cutoff does not match this M1 run: "
+            "standard IP snapshot cutoff does not match the requested reference "
+            "snapshot: "
             f"snapshot={report_cutoff.isoformat()} "
-            f"run={decision_cutoff_time.isoformat()}"
+            f"reference={expected_snapshot_time.isoformat()}"
         )
-    expected_partition = decision_cutoff_time.date().isoformat()
+    expected_partition = expected_snapshot_time.date().isoformat()
     if str(report.get("source_product_partition")) != expected_partition:
         raise DataContractViolation(
             "standard IP snapshot product partition does not match cutoff date: "
@@ -592,9 +609,11 @@ def validate_resolved_standard_ip_snapshot(
             f"expected={expected_partition!r}"
         )
 
-    if int(report.get("cohort_skus", -1)) != len(cohort_skus):
+    expected_report_skus = len(snapshot_skus) if allow_cohort_subset else len(cohort_skus)
+    if int(report.get("cohort_skus", -1)) != expected_report_skus:
         raise DataContractViolation(
-            "standard IP snapshot report cohort_skus does not match cohort"
+            "standard IP snapshot report cohort_skus does not match its mapping "
+            "universe"
         )
     eligible = resolved.loc[
         resolved["path1_eligible"].eq(1)

@@ -1,8 +1,8 @@
 {
   "spec_version": "3.2",
   "server": {
-    "project_root": "/tmp/code/xujing",
-    "data_root": "/data01/yeyingshi/data"
+    "project_root": ".",
+    "data_root": "./data"
   },
   "project": {
     "timezone": "Asia/Shanghai",
@@ -44,11 +44,15 @@
     "stockout_flag_share_threshold": 0.4,
     "shrinkage_k_exposure_days": 7.0,
     "huber_delta": 1.345,
-    "huber_max_iter": 30,
+    "huber_max_iter": 100,
+    "huber_convergence_tolerance": 0.000001,
     "item_effect_ridge": 10.0,
     "store_effect_ridge": 20.0,
     "minimum_price_observations": 30,
-    "promotion_price_ratio_threshold": 0.98
+    "promotion_price_ratio_threshold": 0.98,
+    "stock_grain_stockout_share_threshold": 0.98,
+    "stock_grain_min_open_days": 28,
+    "stock_grain_min_positive_sales_days": 3
   },
   "data_contracts": {
     "availability_registry_path": "config/data_availability_v3_2.json",

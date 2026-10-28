@@ -97,10 +97,14 @@ class RestorationConfig:
     shrinkage_k_exposure_days: float
     huber_delta: float
     huber_max_iter: int
+    huber_convergence_tolerance: float
     item_effect_ridge: float
     store_effect_ridge: float
     minimum_price_observations: int
     promotion_price_ratio_threshold: float
+    stock_grain_stockout_share_threshold: float
+    stock_grain_min_open_days: int
+    stock_grain_min_positive_sales_days: int
 
 
 @dataclass(frozen=True)
@@ -225,10 +229,18 @@ class AppConfig:
                 "restoration.shrinkage_k_exposure_days must be positive"
             )
         huber_delta = float(restoration.get("huber_delta", 1.345))
-        huber_max_iter = int(restoration.get("huber_max_iter", 30))
-        if huber_delta <= 0 or huber_max_iter <= 0:
+        huber_max_iter = int(restoration.get("huber_max_iter", 100))
+        huber_convergence_tolerance = float(
+            restoration.get("huber_convergence_tolerance", 1e-6)
+        )
+        if (
+            huber_delta <= 0
+            or huber_max_iter <= 0
+            or huber_convergence_tolerance <= 0
+        ):
             raise ConfigError(
-                "restoration Huber delta and iteration count must be positive"
+                "restoration Huber delta, iteration count, and convergence "
+                "tolerance must be positive"
             )
         item_effect_ridge = float(restoration.get("item_effect_ridge", 10.0))
         store_effect_ridge = float(restoration.get("store_effect_ridge", 20.0))
@@ -244,6 +256,27 @@ class AppConfig:
         promotion_ratio = float(
             restoration.get("promotion_price_ratio_threshold", 0.98)
         )
+        stock_grain_share = float(
+            restoration.get("stock_grain_stockout_share_threshold", 0.98)
+        )
+        stock_grain_min_open_days = int(
+            restoration.get("stock_grain_min_open_days", 28)
+        )
+        stock_grain_min_positive_sales_days = int(
+            restoration.get("stock_grain_min_positive_sales_days", 3)
+        )
+        if not 0 <= stock_grain_share <= 1:
+            raise ConfigError(
+                "restoration.stock_grain_stockout_share_threshold must be "
+                "between 0 and 1"
+            )
+        if (
+            stock_grain_min_open_days <= 0
+            or stock_grain_min_positive_sales_days <= 0
+        ):
+            raise ConfigError(
+                "restoration stock-grain minimum day counts must be positive"
+            )
         if not 0 < promotion_ratio <= 1:
             raise ConfigError(
                 "restoration.promotion_price_ratio_threshold must be in (0, 1]"
@@ -251,10 +284,10 @@ class AppConfig:
         return cls(
             project_root=root,
             spec_version=spec_version,
-            server_project_root=Path(server.get("project_root", "/tmp/code/xujing")),
+            server_project_root=Path(server.get("project_root", ".")),
             data_root=Path(
                 os.environ.get(
-                    "MINISO_DATA_ROOT", server.get("data_root", "/data01/yeyingshi/data")
+                    "MINISO_DATA_ROOT", server.get("data_root", "./data")
                 )
             ),
             timezone=os.environ.get(
@@ -320,10 +353,16 @@ class AppConfig:
                 shrinkage_k_exposure_days=shrinkage_k,
                 huber_delta=huber_delta,
                 huber_max_iter=huber_max_iter,
+                huber_convergence_tolerance=huber_convergence_tolerance,
                 item_effect_ridge=item_effect_ridge,
                 store_effect_ridge=store_effect_ridge,
                 minimum_price_observations=minimum_price_observations,
                 promotion_price_ratio_threshold=promotion_ratio,
+                stock_grain_stockout_share_threshold=stock_grain_share,
+                stock_grain_min_open_days=stock_grain_min_open_days,
+                stock_grain_min_positive_sales_days=(
+                    stock_grain_min_positive_sales_days
+                ),
             ),
         )
 

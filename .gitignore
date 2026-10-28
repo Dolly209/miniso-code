@@ -6,6 +6,12 @@ __pycache__/
 artifacts/
 logs/
 
+# Local deployment bundles and generated review/run output
+deploy_*.zip
+/output/
+/outputs/
+/review/
+
 # Local customer/reference data. Keep the code and templates in Git,
 # but regenerate or supply these files through an approved data channel.
 reference/*.csv

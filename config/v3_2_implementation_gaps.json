@@ -9,8 +9,8 @@
     },
     {
       "concept": "external_social_direction",
-      "current_blocker": "No point-in-time external IP/platform snapshot is delivered.",
-      "current_treatment": "Cext=1, which is the V3.2 neutral missing-input treatment."
+      "current_blocker": "The delivered interaction_rate has a heavy upper tail (sample maximum 3346.93023256) and awaits provider confirmation of formula/coverage semantics; exact standard-IP-to-ip_name benchmark coverage also requires full-cohort review.",
+      "current_treatment": "interaction_rate is retained only for audit and is excluded from Cext. The data adapter standardizes IP x platform x business-date daily observations, validates date equals ds, sums daily volume over the prelaunch window, weights bounded rates, retains daily trend/stability, and M1 computes a bounded relative Cext. Missing history or unmatched names remain explicitly neutral at Cext=1; no sales, placement or inventory proxy is fabricated."
     },
     {
       "concept": "similarity_weights_temperature_and_K",
@@ -31,8 +31,8 @@
     },
     {
       "concept": "full_vmodel_covariates",
-      "current_blocker": "The current restoration model does not yet include all V3.2 tier/city/mall/area covariates and requires full Train validation.",
-      "current_treatment": "Huber item/store/category-or-global effects and price term are used and reported as a partial model, not a final trained model."
+      "current_blocker": "The separate point-in-time category historical turnover covariate is not implemented; category-specific regression scopes are not equivalent to it. Huber delta, random-effect and shrinkage hyperparameters still use configured values, not a completed Train rolling-fold search. The 20261025 solver/feature repairs have not yet been verified against server data.",
+      "current_treatment": "B1-B5 OOF and final-model orchestration remains separate from frozen-model application. The batching projection now preserves store tier and lifecycle week and enriches real city, city level, business area, area class, operate_size (operating area) and meter_sum (total meters, NOT sales area) from the same cutoff store snapshot. Missing/constant fields are explicitly disabled and audited. The joint solver minimizes the fixed section 8.3.A weighted Huber objective plus literal item/store lambda*u^2 penalties; numerical preconditioning does not change the objective minimizer. Nonconverged scopes remain fallbacks, never labeled converged by an optimizer return alone."
     },
     {
       "concept": "business_event_calendar",
@@ -45,25 +45,25 @@
       "concept": "v_min_g_inv_max_g_tau_tier",
       "formal_implementation": "Optional overrides are accepted through --placement-policy-file and validated per store_tier.",
       "current_blocker": "The PDF specifies the role of these parameters but not their business-calibrated values.",
-      "current_treatment": "v_min,g uses the historical store-tier median; inv_max=0.40 and tau_tier=0.50 are centralized versioned initial values pending Train calibration."
+      "current_treatment": "v_min,g uses the historical store-tier median; StockPressure is ending available inventory divided by recent normal daily sales and uses a centralized 28-day initial inv_max plus tau_tier=0.50 pending Train/business calibration. The former 0.40 stockout-rate proxy is prohibited. Zero recent normal sales is retained as a separate backlog state."
     },
     {
       "concept": "p_prior_and_p_perf",
       "formal_implementation": "The adapter builds launch-window arrival evidence from first_store_arrival_time; a trained probability snapshot may override it through --placement-evidence-file.",
-      "current_blocker": "The current M2 artifact contains observed restore rows, not a definitive planned/not-planned store universe.",
-      "current_treatment": "Use the versioned 28-day window and current eligible-store universe, compute group empirical p_prior/p_perf and V3.2 shrinkage, and label the planned-vs-missing ambiguity. If raw launch evidence cannot be read, use the labeled M2 exposure proxy."
+      "current_blocker": "The current M2 artifact contains observed restore rows, not a definitive planned/not-planned store universe; no approved counterfactual store-probability model has been delivered.",
+      "current_treatment": "Use the versioned 28-day first-arrival window and reconstruct the comparable launch-time eligible universe from store open/close dates in the cutoff-visible dimension snapshot. Raw observations remain store-level and are never replaced by a tier-wide probability. Historically arrived stores are eligible support; non-arrived stores with insufficient evidence are not auto-expanded. Expansion is allowed only from a supplied modeled store-level evidence snapshot. Unexpected schema/read failures stop the run rather than silently widening coverage."
     },
     {
       "concept": "CategoryFit",
-      "formal_implementation": "Read a standardized target-store feature snapshot; missing values follow V3.2 weight renormalization.",
-      "current_blocker": "Round 4 was limited to selected SKU post-launch windows and cannot prove complete last-90-day same-category coverage.",
-      "current_treatment": "Missing remains null and score weights are renormalized; no fabricated 0.5 value."
+      "formal_implementation": "Automatically computes the prior-90-day same-L4-category exposure-weighted neutral velocity percentile by store from the standardized M2 store-week artifact.",
+      "current_blocker": "A run whose M2 artifact does not cover the complete 90-day category/store universe cannot be marked complete.",
+      "current_treatment": "Complete/partial/missing history is labeled per row; missing remains null and store-score weights are renormalized, never filled with a fabricated 0.5."
     },
     {
       "concept": "Execution",
-      "formal_implementation": "Read the in-stock-day ratio with in_stock_not_displayed_flag=0 from a standardized feature snapshot.",
-      "current_blocker": "A versioned representative SKU/time universe has not been supplied.",
-      "current_treatment": "Missing remains null and score weights are renormalized; operate_size is never used as a proxy."
+      "formal_implementation": "Automatically computes one minus non-display days divided by in-stock days over the prior 90 days from the standardized M2 store-week artifact.",
+      "current_blocker": "A run whose M2 artifact does not span the full 90-day execution universe remains partial.",
+      "current_treatment": "Complete/partial/missing history is labeled; missing remains null and score weights are renormalized. operate_size is never used as an execution proxy."
     },
     {
       "concept": "hard_store_eligibility",
@@ -81,8 +81,8 @@
   "m5_factors": [
     {
       "concept": "formal_small_factor_universe",
-      "current_blocker": "Several V3.2 social, IP, product, operation and competition raw fields are not delivered.",
-      "current_treatment": "Missing groups are neutralized; available member/supplier fields are exploratory standardized features and are not claimed as final V3.2 factors."
+      "current_blocker": "Internal marketing plan/resource fields for OF-01 and the design/material/play detail needed to complete all PR-10/PR-13 components are not delivered.",
+      "current_treatment": "IP-01/02/03 use point-in-time social history; IP-04 uses PR-01/02; PF-01 uses available PR-07 history, PF-02 uses PR-04, and PF-03 uses the supportable PR-13 rarity component. Missing subfactors are excluded and weights renormalized. OF-01 remains neutral unless reviewed business input is supplied. Member and supplier fields remain diagnostics as specified."
     },
     {
       "concept": "factor_weights_betas_price_elasticity_and_bounds",
@@ -91,8 +91,8 @@
     },
     {
       "concept": "competition_rules",
-      "current_blocker": "No versioned competition input is supplied.",
-      "current_treatment": "Ccompetition=1 unless an explicit rule snapshot is passed."
+      "current_blocker": "No confirmed gallery/material-conflict relation for CO-02 or substitution/clearance relation for CO-03 is supplied.",
+      "current_treatment": "CO-01 same-standard-IP launch count is computed automatically from release dates and the reviewed IP mapping. CO-02/03 do not trigger without their explicit relation tables."
     }
   ],
   "m6_m7_first_order": [
@@ -124,9 +124,29 @@
   ],
   "training": [
     {
+      "concept": "pure_demand_vs_order_policy_training_baseline",
+      "current_blocker": "No additional data blocker; corrected outputs must be replayed on the server before the new model can be evaluated.",
+      "current_treatment": "Section 8.4 now trains the demand coefficient from D_demand_base (pure potential sales demand) against D_first_ref. Safety stock, minimum floor, display, MOQ/case-pack/capacity and Q_feas remain downstream order-policy quantities. Demand grade and supply-feasible grade are emitted and evaluated separately."
+    },
+    {
+      "concept": "BandMAE_quantity_definition",
+      "current_blocker": "None in code; real locked-Test results require server replay.",
+      "current_treatment": "BandMAE is the equal average of per-actual-sales-band quantity MAE using centralized V3.2 band boundaries. It is no longer grade-distance MAE."
+    },
+    {
+      "concept": "D_first_ref_W_cover_label",
+      "current_blocker": "Business-confirmed SKU-level Wdecision/Wbuffer/Wlead/Wlife/Whard snapshots are not delivered; versioned V3.2 example values are still defaults unless a constraints artifact is supplied.",
+      "current_treatment": "build_first_order_labels.py now reuses Round4 restored_store_weekly, writes D_first_ref as restored_natural_sales summed inside each SKU-specific W_cover, retains clean_sales_qty as the observed lower-bound audit, excludes stock-grain cases for which lost-sales restoration was disabled, excludes large missing-exposure blocks using the disclosed versioned 5% threshold, re-splits the feasible SKU set chronologically, and fits long-tail weights from Train-only 26-week sales bands. sales_26w_qty is explicitly rejected as the first-order label. The 5% large-missing threshold requires later business confirmation because V3.2 defines the exclusion qualitatively but does not prescribe a numeric cutoff."
+    },
+    {
+      "concept": "historical_first_order_decision_time_tj",
+      "current_blocker": "The point-in-time replay orchestrator is implemented locally but has not yet been smoke-tested against the server's real historical partitions.",
+      "current_treatment": "Per the confirmed business rule, the current default evaluates T-3M as one complete-demand forecast. train_restoration_oof.py fixes B1-B5 Train blocks, trains B1->B2 through B1..B4->B5 v_model artifacts and one final Train-only model. replay_prelaunch_features.py requires the corresponding registry, groups checkpoint/model pairs, rebuilds the mature historical candidate pool at each cutoff, executes M1 Top-K before applying frozen M2, fixes only the business-confirmed static product/IP snapshot at the global available-through date, writes checkpoint-keyed features, and supports deterministic resume."
+    },
+    {
       "concept": "full_v3_2_joint_training",
-      "current_blocker": "Current rolling OOF code fits a generic regularized model but does not jointly train all V3.2 similarity, factor, lifecycle, reorder residual and reliability blocks.",
-      "current_treatment": "train.py is labeled partial_training_scaffold_not_full_v3_2."
+      "current_blocker": "Section 8.4 first-order orchestration, the M2 B1-seed/four-OOF/final model boundary, fold-local Section 8.3 B comparable tuning, and constrained Section 8.3 C production-formula fitting are implemented locally but have not been executed on the server. Comparable tuning is intentionally limited to each target's point-in-time M1 Top-3 identities under the confirmed M1-before-M2 sequence; candidates outside Top-3 are not restored. Reorder residual/state/reliability fitting still needs a separate mature historical reorder-node replay set.",
+      "current_treatment": "Dataset assembly requires two distinct checkpoint-keyed snapshots and two matching candidate-detail artifacts: Train fold inputs and full-Train/final-Test inputs. train.py freezes dataset_version and SKU lists, builds B1-B5 without splitting a sale date, refits similarity weights/temperature/K and first-order coefficients inside every historical fold, selects configuration from B2-B5 OOF WAPE/Bias/BandMAE, refits on all Train, saves data/code/config hashes and protection/calibration parameters, and leaves Test untouched for one backtest.py replay. It does not falsely mark reorder D complete without its own mature decision-node training evidence."
     }
   ],
   "n1_n6_reorder": [
